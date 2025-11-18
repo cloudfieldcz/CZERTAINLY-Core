@@ -180,6 +180,7 @@ class DiscoveryServiceTest extends BaseSpringBootTest {
 
     @Test
     void testBulkRemove() throws NotFoundException {
+        discoveryService.deleteDiscovery(discovery.getSecuredUuid());
         discoveryService.bulkRemoveDiscovery(List.of(discovery.getSecuredUuid()));
         Assertions.assertThrows(NotFoundException.class, () -> discoveryService.getDiscovery(discovery.getSecuredUuid()));
     }

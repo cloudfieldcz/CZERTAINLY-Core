@@ -35,15 +35,17 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 
@@ -349,6 +351,7 @@ class LocationServiceTest extends BaseSpringBootTest {
     }
 
     @Test
+    @Transactional
     void testEnableLocation() throws NotFoundException {
         locationService.enableLocation(location.getEntityInstanceReference().getSecuredParentUuid(), location.getSecuredUuid());
         Assertions.assertEquals(true, location.getEnabled());
@@ -360,6 +363,7 @@ class LocationServiceTest extends BaseSpringBootTest {
     }
 
     @Test
+    @Transactional
     void testDisableLocation() throws NotFoundException {
         locationService.disableLocation(location.getEntityInstanceReference().getSecuredParentUuid(), location.getSecuredUuid());
         Assertions.assertFalse(locationService.getLocation(SecuredParentUUID.fromUUID(location.getEntityInstanceReferenceUuid()), location.getSecuredUuid()).isEnabled());

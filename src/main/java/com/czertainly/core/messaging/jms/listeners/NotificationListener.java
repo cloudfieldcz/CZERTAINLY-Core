@@ -1,4 +1,4 @@
-package com.czertainly.core.messaging.listeners;
+package com.czertainly.core.messaging.jms.listeners;
 
 import com.czertainly.api.clients.NotificationInstanceApiClient;
 import com.czertainly.api.exception.*;
@@ -13,16 +13,15 @@ import com.czertainly.api.model.core.auth.Resource;
 import com.czertainly.api.model.core.auth.RoleDetailDto;
 import com.czertainly.api.model.core.auth.UserDetailDto;
 import com.czertainly.api.model.core.connector.ConnectorDto;
+import com.czertainly.api.model.core.notification.RecipientType;
 import com.czertainly.api.model.core.other.ResourceEvent;
 import com.czertainly.core.attribute.engine.AttributeEngine;
 import com.czertainly.core.dao.entity.Group;
 import com.czertainly.core.dao.entity.notifications.*;
 import com.czertainly.core.dao.repository.GroupRepository;
 import com.czertainly.core.dao.repository.notifications.NotificationInstanceReferenceRepository;
-import com.czertainly.api.model.core.notification.RecipientType;
 import com.czertainly.core.dao.repository.notifications.NotificationProfileVersionRepository;
 import com.czertainly.core.dao.repository.notifications.PendingNotificationRepository;
-import com.czertainly.core.messaging.configuration.RabbitMQConstants;
 import com.czertainly.core.messaging.model.NotificationMessage;
 import com.czertainly.core.messaging.model.NotificationRecipient;
 import com.czertainly.core.security.authn.client.RoleManagementApiClient;
@@ -30,10 +29,9 @@ import com.czertainly.core.security.authn.client.UserManagementApiClient;
 import com.czertainly.core.service.NotificationService;
 import com.czertainly.core.service.ResourceObjectAssociationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,8 +40,9 @@ import java.time.OffsetDateTime;
 import java.util.*;
 
 @Component
+@AllArgsConstructor
 @Transactional
-public class NotificationListener {
+public class NotificationListener implements MessageProcessor<NotificationMessage> {
 
     private static final Logger logger = LoggerFactory.getLogger(NotificationListener.class);
     private static final String EMAIL_NOTIFICATION_PROVIDER_KIND = "EMAIL";
@@ -72,69 +71,14 @@ public class NotificationListener {
         eventToLegacyNotificationTypeMapping.put(ResourceEvent.SCHEDULED_JOB_FINISHED, "scheduled_job_completed");
     }
 
-    @Autowired
-    public void setObjectMapper(ObjectMapper mapper) {
-        this.mapper = mapper;
-    }
-
-    @Autowired
-    public void setAttributeEngine(AttributeEngine attributeEngine) {
-        this.attributeEngine = attributeEngine;
-    }
-
-    @Autowired
-    public void setNotificationService(NotificationService notificationService) {
-        this.notificationService = notificationService;
-    }
-
-    @Autowired
-    public void setNotificationInstanceApiClient(NotificationInstanceApiClient notificationInstanceApiClient) {
-        this.notificationInstanceApiClient = notificationInstanceApiClient;
-    }
-
-    @Autowired
-    public void setPendingNotificationRepository(PendingNotificationRepository pendingNotificationRepository) {
-        this.pendingNotificationRepository = pendingNotificationRepository;
-    }
-
-    @Autowired
-    public void setNotificationProfileVersionRepository(NotificationProfileVersionRepository notificationProfileVersionRepository) {
-        this.notificationProfileVersionRepository = notificationProfileVersionRepository;
-    }
-
-    @Autowired
-    public void setNotificationInstanceReferenceRepository(NotificationInstanceReferenceRepository notificationInstanceReferenceRepository) {
-        this.notificationInstanceReferenceRepository = notificationInstanceReferenceRepository;
-    }
-
-    @Autowired
-    public void setGroupRepository(GroupRepository groupRepository) {
-        this.groupRepository = groupRepository;
-    }
-
-    @Autowired
-    public void setUserManagementApiClient(UserManagementApiClient userManagementApiClient) {
-        this.userManagementApiClient = userManagementApiClient;
-    }
-
-    @Autowired
-    public void setRoleManagementApiClient(RoleManagementApiClient roleManagementApiClient) {
-        this.roleManagementApiClient = roleManagementApiClient;
-    }
-
-    @Autowired
-    public void setResourceObjectAssociationService(ResourceObjectAssociationService resourceObjectAssociationService) {
-        this.resourceObjectAssociationService = resourceObjectAssociationService;
-    }
-
-    @RabbitListener(queues = RabbitMQConstants.QUEUE_NOTIFICATIONS_NAME, messageConverter = "jsonMessageConverter", concurrency = "${messaging.concurrency.notifications}")
+    @Override
     public void processMessage(NotificationMessage message) {
         logger.debug("Received notification message: {}", message);
 
         if (message.getNotificationProfileUuids() == null) {
             try {
                 sendInternalNotifications(message.getRecipients(), getInternalNotificationData(message), message.getResource(), message.getObjectUuid());
-            } catch (Exception e) {
+            } catch (ValidationException e) {
                 logger.error("Error in internal notification: {}", e.toString());
             }
         } else {
@@ -152,24 +96,19 @@ public class NotificationListener {
     }
 
     private void sendByNotificationProfile(UUID notificationProfileUuid, NotificationMessage message) throws NotFoundException {
-        NotificationProfileVersion notificationProfileVersion = null;
+        NotificationProfileVersion notificationProfileVersion = notificationProfileVersionRepository.findTopByNotificationProfileUuidOrderByVersionDesc(notificationProfileUuid).orElseThrow(() -> new NotFoundException(NotificationProfile.class, notificationProfileUuid));
         PendingNotification pendingNotification = null;
         if (message.getEvent().isMonitoring()) {
             pendingNotification = pendingNotificationRepository.findByNotificationProfileUuidAndResourceAndObjectUuidAndEvent(notificationProfileUuid, message.getResource(), message.getObjectUuid(), message.getEvent());
             if (pendingNotification == null) {
-                notificationProfileVersion = notificationProfileVersionRepository.findTopByNotificationProfileUuidOrderByVersionDesc(notificationProfileUuid).orElseThrow(() -> new NotFoundException(NotificationProfile.class, notificationProfileUuid));
                 pendingNotification = getNewPendingNotification(message, notificationProfileVersion, pendingNotification);
             } else {
                 notificationProfileVersion = notificationProfileVersionRepository.findByNotificationProfileUuidAndVersion(notificationProfileUuid, pendingNotification.getVersion()).orElseThrow(() -> new NotFoundException(NotificationProfile.class, notificationProfileUuid));
             }
         }
 
-        if (notificationProfileVersion == null) {
-            notificationProfileVersion = notificationProfileVersionRepository.findTopByNotificationProfileUuidOrderByVersionDesc(notificationProfileUuid).orElseThrow(() -> new NotFoundException(NotificationProfile.class, notificationProfileUuid));
-        }
-
         if (!proceedWithNotifying(notificationProfileVersion, pendingNotification)) {
-            logger.debug("Notification suppressed for {} with UUID {} by configuration of notification profile {} for event {}. Notification sent last time at {} and was repeated {} times.", pendingNotification.getResource().getLabel(), pendingNotification.getObjectUuid(), notificationProfileVersion.getNotificationProfile().getName(), message.getEvent(), pendingNotification.getLastSentAt(), pendingNotification.getRepetitions());
+            logger.debug("Notification suppressed by configuration of notification profile {} for event {}. Notification sent last time at {} and was repeated {} times.", notificationProfileVersion.getNotificationProfile().getName(), message.getEvent(), pendingNotification.getLastSentAt(), pendingNotification.getRepetitions());
             return;
         }
 
@@ -227,7 +166,7 @@ public class NotificationListener {
         }
 
         OffsetDateTime now = OffsetDateTime.now();
-        return (notificationProfileVersion.getFrequency() == null || pendingNotification.getLastSentAt() == null || Duration.between(pendingNotification.getLastSentAt(), now).compareTo(notificationProfileVersion.getFrequency()) > 0)
+        return (notificationProfileVersion.getFrequency() == null || pendingNotification.getLastSentAt() == null || Duration.between(pendingNotification.getLastSentAt(), now).getNano() > notificationProfileVersion.getFrequency().getNano())
                 && (notificationProfileVersion.getRepetitions() == null || pendingNotification.getRepetitions() < notificationProfileVersion.getRepetitions());
     }
 
@@ -248,8 +187,7 @@ public class NotificationListener {
     private List<NotificationRecipient> getDefaultRecipients(ResourceEvent event, Object data, Resource resource, UUID objectUuid) {
         List<NotificationRecipient> recipients = new ArrayList<>();
         switch (event) {
-            case CERTIFICATE_STATUS_CHANGED, CERTIFICATE_ACTION_PERFORMED, CERTIFICATE_EXPIRING,
-                 CERTIFICATE_NOT_COMPLIANT -> {
+            case CERTIFICATE_STATUS_CHANGED, CERTIFICATE_ACTION_PERFORMED, CERTIFICATE_EXPIRING, CERTIFICATE_NOT_COMPLIANT -> {
                 NameAndUuidDto ownerInfo = resourceObjectAssociationService.getOwner(resource, objectUuid);
                 if (ownerInfo != null) {
                     recipients.add(new NotificationRecipient(RecipientType.USER, UUID.fromString(ownerInfo.getUuid())));
@@ -473,7 +411,7 @@ public class NotificationListener {
             }
 
             case CERTIFICATE_EXPIRING -> {
-                CertificateExpiringEventData data = (CertificateExpiringEventData) eventData;
+                CertificateExpiringEventData data = (CertificateExpiringEventData)  eventData;
                 yield new InternalNotificationEventData("Certificate identified as '%s' with serial number '%s' issued by '%s' is expiring on %s"
                         .formatted(data.getSubjectDn(), data.getSerialNumber(), data.getIssuerDn(), data.getExpiresAt()), null);
             }

@@ -20,6 +20,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -28,6 +29,7 @@ import java.util.UUID;
 
 @SpringBootTest
 @Import(SpringBootTestContext.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class BaseSpringBootTest {
 
     @Autowired

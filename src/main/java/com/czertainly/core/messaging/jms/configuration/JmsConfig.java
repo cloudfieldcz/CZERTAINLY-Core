@@ -1,0 +1,60 @@
+package com.czertainly.core.messaging.jms.configuration;
+
+import jakarta.jms.ConnectionFactory;
+import org.apache.qpid.jms.JmsConnectionFactory;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.jms.annotation.EnableJms;
+import org.springframework.jms.config.DefaultJmsListenerContainerFactory;
+import org.springframework.jms.core.JmsTemplate;
+import org.springframework.jms.support.converter.MappingJackson2MessageConverter;
+import org.springframework.jms.support.converter.MessageConverter;
+import org.springframework.jms.support.converter.MessageType;
+
+@EnableJms
+@Configuration
+@Profile("!test")
+@EnableConfigurationProperties({MessagingProperties.class, MessagingConcurrencyProperties.class})
+public class JmsConfig {
+
+    @Bean
+    ConnectionFactory connectionFactory(MessagingProperties messagingProperties) {
+        JmsConnectionFactory factory = new JmsConnectionFactory(messagingProperties.brokerUrl());
+        factory.setUsername(messagingProperties.user());
+        factory.setPassword(messagingProperties.password());
+        factory.setForceSyncSend(true);
+        return factory;
+    }
+
+    @Bean
+    public DefaultJmsListenerContainerFactory jmsListenerContainerFactory(
+            ConnectionFactory connectionFactory,
+            MessageConverter messageConverter, MessagingProperties messagingProperties) {
+        DefaultJmsListenerContainerFactory factory = new DefaultJmsListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory);
+        factory.setMessageConverter(messageConverter);
+        if (messagingProperties.listener() != null && messagingProperties.listener().recoveryInterval() != null) {
+            factory.setRecoveryInterval(messagingProperties.listener().recoveryInterval());
+        }
+        return factory;
+    }
+
+    @Bean
+    public MessageConverter messageConverter() {
+        MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter();
+        converter.setTargetType(MessageType.TEXT);
+        // object name (typeId) in this property
+        converter.setTypeIdPropertyName("_typeId");
+        return converter;
+    }
+
+    @Bean
+    public JmsTemplate jmsTemplate(ConnectionFactory connectionFactory,
+                                   MessageConverter messageConverter) {
+        JmsTemplate template = new JmsTemplate(connectionFactory);
+        template.setMessageConverter(messageConverter);
+        return template;
+    }
+}

@@ -45,13 +45,15 @@ server:
     enabled: false
 
 spring:
+  main:
+    allow-bean-definition-overriding: true
   datasource:
     driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
     hikari:
       minimum-idle: 5
       maximumPoolSize: 40
-    password: test
     url: jdbc:tc:postgresql:13-alpine://localhost:55432/czertainly-test
+    password: test
     username: test
   flyway:
     enabled: false
@@ -68,3 +70,41 @@ spring:
   threads:
     virtual:
       enabled: true
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+  messaging:
+    broker-url: amqp://localhost:5672
+    user: guest
+    password: guest
+    queue:
+      actions: test.core.actions
+      audit-logs: test.core.audit-logs
+      event: test.core.event
+      notification: test.core.notification
+      scheduler: test.core.scheduler
+      validation: test.core.validation
+    exchange: test.czertainly
+    routing-key:
+      actions: test.actions
+      audit-logs: test.audit-logs
+      event: test.event
+      notification: test.notification
+      scheduler: test.scheduler
+      validation: test.validation
+messaging:
+  concurrency:
+    actions: 10
+    events: 5
+    notifications: 3
+    scheduler: 10
+    validation: 5
+    audit-logs: 5
+
+otel:
+  instrumentation:
+    enabled: false
+  sdk:
+    disabled: true

@@ -26,9 +26,9 @@ import com.czertainly.core.dao.repository.CertificateRelationRepository;
 import com.czertainly.core.dao.repository.CertificateRepository;
 import com.czertainly.core.dao.repository.RaProfileRepository;
 import com.czertainly.core.events.handlers.CertificateActionPerformedEventHandler;
+import com.czertainly.core.messaging.jms.producers.ActionsProducer;
+import com.czertainly.core.messaging.jms.producers.EventProducer;
 import com.czertainly.core.messaging.model.ActionMessage;
-import com.czertainly.core.messaging.producers.ActionProducer;
-import com.czertainly.core.messaging.producers.EventProducer;
 import com.czertainly.core.model.auth.CertificateProtocolInfo;
 import com.czertainly.core.model.auth.ResourceAction;
 import com.czertainly.core.model.request.CertificateRequest;
@@ -82,7 +82,7 @@ public class ClientOperationServiceImpl implements ClientOperationService {
     private AttributeEngine attributeEngine;
     private CertificateRelationRepository certificateRelationRepository;
 
-    private ActionProducer actionProducer;
+    private ActionsProducer actionProducer;
     private EventProducer eventProducer;
 
     @Autowired
@@ -96,7 +96,7 @@ public class ClientOperationServiceImpl implements ClientOperationService {
     }
 
     @Autowired
-    public void setActionProducer(ActionProducer actionProducer) {
+    public void setActionProducer(ActionsProducer actionProducer) {
         this.actionProducer = actionProducer;
     }
 

@@ -12,7 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Component
-@Profile("!test")
+@Profile("!test & !messaging-int-test")
 public class DatabaseInfoContributor implements InfoContributor {
 
     private final Map<String, Object> cachedDatabaseInfo = new HashMap<>();

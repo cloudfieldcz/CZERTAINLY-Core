@@ -39,7 +39,7 @@ import com.czertainly.core.enums.FilterField;
 import com.czertainly.core.events.data.DiscoveryResult;
 import com.czertainly.core.events.data.EventDataBuilder;
 import com.czertainly.core.events.handlers.*;
-import com.czertainly.core.messaging.listeners.NotificationListener;
+import com.czertainly.core.messaging.jms.listeners.NotificationListener;
 import com.czertainly.core.messaging.model.NotificationMessage;
 import com.czertainly.core.messaging.model.NotificationRecipient;
 import com.czertainly.core.model.ScheduledTaskResult;
@@ -58,7 +58,10 @@ import org.springframework.test.context.DynamicPropertySource;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.Date;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 class EventHandlersTest extends BaseSpringBootTest {
 

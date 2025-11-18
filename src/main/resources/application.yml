@@ -126,29 +126,34 @@ spring:
         order_updates: true
         type:
           preferred_duration_jdbc_type: INTERVAL_SECOND
-  # RabbitMQ configuration
-  rabbitmq:
-    connection-timeout: 10000
-    host: ${RABBITMQ_HOST}
+  messaging:
+    broker-url: ${BROKER_URL}
+    user: ${BROKER_USERNAME}
+    password: ${BROKER_PASSWORD}
     listener:
-      simple:
-        default-requeue-rejected: false
-        # Do not stop the container if queues are briefly missing/mismatched on broker restart
-        missing-queues-fatal: false
-        mismatched-queues-fatal: false
-        prefetch: 3
-        recovery-interval: 5000
-        retry:
-          enabled: true
-          initial-interval: 3000
-          max-attempts: 3
-          max-interval: 10000
-          multiplier: 2
-    password: ${RABBITMQ_PASSWORD}
-    port: ${RABBITMQ_PORT:5672}
-    requested-heartbeat: 30
-    username: ${RABBITMQ_USERNAME}
-    virtual-host: ${RABBITMQ_VHOST:czertainly}
+      recovery-interval: 5000
+    producer:
+      retry:
+        enabled: true
+        initial-interval: 3000
+        max-attempts: 3
+        max-interval: 10000
+        multiplier: 2
+    queue:
+      actions: core.actions
+      audit-logs: core.audit-logs
+      event: core.event
+      notification: core.notification
+      scheduler: core.scheduler
+      validation: core.validation
+    exchange: czertainly
+    routing-key:
+      actions: actions
+      audit-logs: audit-logs
+      event: event
+      notification: notification
+      scheduler: scheduler
+      validation: validation
   threads:
     virtual:
       enabled: true
