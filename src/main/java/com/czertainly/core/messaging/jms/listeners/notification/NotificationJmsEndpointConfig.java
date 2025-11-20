@@ -17,25 +17,11 @@ public class NotificationJmsEndpointConfig extends AbstractJmsEndpointConfig<Not
     private final MessagingProperties messagingProperties;
     private final MessagingConcurrencyProperties messagingConcurrencyProperties;
 
-//    @Autowired
-//    public void setMessageConverter(MessageConverter messageConverter) {
-//        this.messageConverter = messageConverter;
-//    }
-//
-//    @Autowired
-//    public void setListenerMessageProcessor(MessageProcessor<NotificationMessage> listenerMessageProcessor) {
-//        this.listenerMessageProcessor = listenerMessageProcessor;
-//    }
-//    @Autowired
-//    public void setJmsRetryTemplate(RetryTemplate jmsRetryTemplate) {
-//        this.jmsRetryTemplate = jmsRetryTemplate;
-//    }
-
     @Override
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "notificationListener",
-                messagingProperties::destinationNotifications,
+                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS ? messagingProperties.exchange() : messagingProperties.queue().notification(),
                 () -> messagingProperties.routingKey().notification(),
                 messagingConcurrencyProperties::notifications,
                 NotificationMessage.class

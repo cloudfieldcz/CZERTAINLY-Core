@@ -15,7 +15,7 @@ import org.springframework.jms.config.JmsListenerEndpointRegistrar;
 @Configuration
 @Profile("!test")
 @AllArgsConstructor
-public class JmsListenersConfiigurerImpl implements JmsListenerConfigurer {
+public class JmsListenersConfigurerImpl implements JmsListenerConfigurer {
 
     private final ActionsJmsEndpointConfig actionsJmsEndpointConfig;
     private final AuditLogsJmsEndpointConfig auditLogsJmsEndpointConfig;

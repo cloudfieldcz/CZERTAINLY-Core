@@ -2,6 +2,7 @@ package com.czertainly.core.messaging.jms.producers;
 
 import com.czertainly.api.model.common.events.data.InternalNotificationEventData;
 import com.czertainly.api.model.core.auth.Resource;
+import com.czertainly.core.messaging.jms.configuration.JmsConfig;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
 import com.czertainly.core.messaging.model.NotificationMessage;
 import com.czertainly.core.messaging.model.NotificationRecipient;
@@ -9,7 +10,7 @@ import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jms.core.JmsTemplate;
-import org.springframework.jms.core.MessagePostProcessor;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -21,11 +22,20 @@ public class NotificationProducer {
     private static final Logger logger = LoggerFactory.getLogger(NotificationProducer.class);
 
     private final JmsTemplate jmsTemplate;
-    private final MessagePostProcessor messagePostProcessor;
     private final MessagingProperties messagingProperties;
+    private final RetryTemplate retryTemplate;
 
     public void sendMessage(final NotificationMessage notificationMessage) {
-        jmsTemplate.convertAndSend(messagingProperties.destinationNotifications(), notificationMessage, messagePostProcessor);
+        retryTemplate.execute(context -> {
+            jmsTemplate.convertAndSend(
+                    messagingProperties.produceDestinationNotifications(),
+                    notificationMessage,
+                    message -> {
+                        message.setStringProperty(JmsConfig.ROUTING_KEY, messagingProperties.routingKey().notification());
+                        return message;
+                    });
+            return null;
+        });
     }
 
     public void produceMessage(final NotificationMessage notificationMessage) {

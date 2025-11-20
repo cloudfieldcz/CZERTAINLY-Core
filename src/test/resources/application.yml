@@ -70,30 +70,40 @@ spring:
   threads:
     virtual:
       enabled: true
+  # testcontainers configuration
   rabbitmq:
     host: localhost
     port: 5672
     username: guest
     password: guest
   messaging:
+    name: RABBITMQ
     broker-url: amqp://localhost:5672
     user: guest
     password: guest
     queue:
-      actions: test.core.actions
-      audit-logs: test.core.audit-logs
-      event: test.core.event
-      notification: test.core.notification
-      scheduler: test.core.scheduler
-      validation: test.core.validation
-    exchange: test.czertainly
+      actions: core.actions
+      audit-logs: core.audit-logs
+      event: core.event
+      notification: core.notification
+      scheduler: core.scheduler
+      validation: core.validation
+    exchange: czertainly
+    exchange-prefix: /exchanges/
     routing-key:
-      actions: test.actions
-      audit-logs: test.audit-logs
-      event: test.event
-      notification: test.notification
-      scheduler: test.scheduler
-      validation: test.validation
+      actions: actions
+      audit-logs: audit-logs
+      event: event
+      notification: notification
+      scheduler: scheduler
+      validation: validation
+    producer:
+      retry:
+        enabled: true
+        initial-interval: 500
+        max-attempts: 5
+        max-interval: 5000
+        multiplier: 2
 messaging:
   concurrency:
     actions: 10

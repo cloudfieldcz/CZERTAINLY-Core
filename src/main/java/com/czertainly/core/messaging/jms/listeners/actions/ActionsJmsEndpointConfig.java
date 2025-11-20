@@ -15,29 +15,13 @@ import org.springframework.stereotype.Component;
 @AllArgsConstructor
 public class ActionsJmsEndpointConfig extends AbstractJmsEndpointConfig<ActionMessage> {
 
-    private final MessagingProperties messagingProperties;
     private final MessagingConcurrencyProperties messagingConcurrencyProperties;
-
-//    @Autowired
-//    public void setMessageConverter(MessageConverter messageConverter) {
-//        this.messageConverter = messageConverter;
-//    }
-//
-//    @Autowired
-//    public void setListenerMessageProcessor(MessageProcessor<ActionMessage> listenerMessageProcessor) {
-//        this.listenerMessageProcessor = listenerMessageProcessor;
-//    }
-//
-//    @Autowired
-//    public void setJmsRetryTemplate(RetryTemplate jmsRetryTemplate) {
-//        this.jmsRetryTemplate = jmsRetryTemplate;
-//    }
 
     @Override
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "actionsListener",
-                messagingProperties::destinationActions,
+                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS ? messagingProperties.exchange() : messagingProperties.queue().actions(),
                 () -> messagingProperties.routingKey().actions(),
                 messagingConcurrencyProperties::actions,
                 ActionMessage.class

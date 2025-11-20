@@ -69,7 +69,7 @@ public class ActionsListener implements MessageProcessor<ActionMessage> {
                     logger.error("{}: {}", errorMessage, e.getMessage());
                     notificationProducer.produceInternalNotificationMessage(actionMessage.getResource(), actionMessage.getResourceUuid(),
                             NotificationRecipient.buildUserNotificationRecipient(actionMessage.getUserUuid()), errorMessage, e.getMessage());
-                    throw new MessageHandlingException(messagingProperties.queue().actions(), actionMessage, "Handling of action approval creation failed: " + e.getMessage());
+                    throw new MessageHandlingException(messagingProperties.routingKey().actions(), actionMessage, "Handling of action approval creation failed: " + e.getMessage());
                 }
                 return;
             }
@@ -83,7 +83,7 @@ public class ActionsListener implements MessageProcessor<ActionMessage> {
             logger.error("{}: {}", errorMessage, e.getMessage());
             notificationProducer.produceInternalNotificationMessage(actionMessage.getResource(), actionMessage.getResourceUuid(),
                     NotificationRecipient.buildUserNotificationRecipient(actionMessage.getUserUuid()), errorMessage, e.getMessage());
-            throw new MessageHandlingException(messagingProperties.queue().actions(), actionMessage, "Unable to process action: " + e.getMessage());
+            throw new MessageHandlingException(messagingProperties.routingKey().actions(), actionMessage, "Unable to process action: " + e.getMessage());
         }
     }
 

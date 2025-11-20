@@ -127,6 +127,7 @@ spring:
         type:
           preferred_duration_jdbc_type: INTERVAL_SECOND
   messaging:
+    name: ${BROKER_NAME:SERVICEBUS}
     broker-url: ${BROKER_URL}
     user: ${BROKER_USERNAME}
     password: ${BROKER_PASSWORD}
@@ -139,21 +140,23 @@ spring:
         max-attempts: 3
         max-interval: 10000
         multiplier: 2
-    queue:
-      actions: core.actions
-      audit-logs: core.audit-logs
-      event: core.event
-      notification: core.notification
-      scheduler: core.scheduler
-      validation: core.validation
-    exchange: czertainly
+    exchange: ${BROKER_EXCHANGE:czertainly}
+# for rabbitMQ
+#    exchange-prefix: ${BROKER_EXCHANGE_PREFIX}
+#    queue:
+#      actions: ${BROKER_QUEUE_ACTIONS:core.actions}
+#      audit-logs: ${BROKER_QUEUE_AUDIT_LOGS:core.audit-logs}
+#      event: ${BROKER_QUEUE_EVENT:core.event}
+#      notification: ${BROKER_QUEUE_NOTIFICATION:core.notification}
+#      scheduler: ${BROKER_QUEUE_SCHEDULER:core.scheduler}
+#      validation: ${BROKER_QUEUE_VALIDATION:core.validation}
     routing-key:
-      actions: actions
-      audit-logs: audit-logs
-      event: event
-      notification: notification
-      scheduler: scheduler
-      validation: validation
+      actions: ${BROKER_ROUTINGKEY_ACTIONS:actions}
+      audit-logs: ${BROKER_ROUTINGKEY_AUDIT_LOGS:auditlogs}
+      event: ${BROKER_ROUTINGKEY_EVENT:event}
+      notification: ${BROKER_ROUTINGKEY_NOTIFICATION:notification}
+      scheduler: ${BROKER_ROUTINGKEY_SCHEDULER:scheduler}
+      validation: ${BROKER_ROUTINGKEY_VALIDATION:validation}
   threads:
     virtual:
       enabled: true

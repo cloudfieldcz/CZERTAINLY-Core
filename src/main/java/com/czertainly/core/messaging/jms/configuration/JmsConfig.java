@@ -15,15 +15,17 @@ import org.springframework.jms.support.converter.MessageType;
 
 @EnableJms
 @Configuration
-@Profile("!test")
+@Profile("!test & !toxiproxy-messaging-int-test")
 @EnableConfigurationProperties({MessagingProperties.class, MessagingConcurrencyProperties.class})
 public class JmsConfig {
 
+    public static final String ROUTING_KEY = "routingKey";
+
     @Bean
-    ConnectionFactory connectionFactory(MessagingProperties messagingProperties) {
-        JmsConnectionFactory factory = new JmsConnectionFactory(messagingProperties.brokerUrl());
-        factory.setUsername(messagingProperties.user());
-        factory.setPassword(messagingProperties.password());
+    public ConnectionFactory connectionFactory(MessagingProperties props) {
+        JmsConnectionFactory factory = new JmsConnectionFactory(props.brokerUrl());
+        factory.setUsername(props.user());
+        factory.setPassword(props.password());
         factory.setForceSyncSend(true);
         return factory;
     }
@@ -35,6 +37,10 @@ public class JmsConfig {
         DefaultJmsListenerContainerFactory factory = new DefaultJmsListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(messageConverter);
+        if (messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS) {
+            factory.setPubSubDomain(true);
+            factory.setSubscriptionDurable(true);
+        }
         if (messagingProperties.listener() != null && messagingProperties.listener().recoveryInterval() != null) {
             factory.setRecoveryInterval(messagingProperties.listener().recoveryInterval());
         }

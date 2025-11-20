@@ -17,25 +17,11 @@ public class AuditLogsJmsEndpointConfig extends AbstractJmsEndpointConfig<AuditL
     private final MessagingProperties messagingProperties;
     private final MessagingConcurrencyProperties messagingConcurrencyProperties;
 
-//    @Autowired
-//    public void setMessageConverter(MessageConverter messageConverter) {
-//        this.messageConverter = messageConverter;
-//    }
-//
-//    @Autowired
-//    public void setListenerMessageProcessor(MessageProcessor<AuditLogMessage> listenerMessageProcessor) {
-//        this.listenerMessageProcessor = listenerMessageProcessor;
-//    }
-//    @Autowired
-//    public void setJmsRetryTemplate(RetryTemplate jmsRetryTemplate) {
-//        this.jmsRetryTemplate = jmsRetryTemplate;
-//    }
-
     @Override
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "auditLogsListener",
-                messagingProperties::destinationAuditLogs,
+                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS ? messagingProperties.exchange() : messagingProperties.queue().auditLogs(),
                 () -> messagingProperties.routingKey().auditLogs(),
                 messagingConcurrencyProperties::auditLogs,
                 AuditLogMessage.class

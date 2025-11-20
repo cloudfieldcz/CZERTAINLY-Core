@@ -62,27 +62,28 @@ Operations can be automated by the `Core`, but also can be performed manually by
 
 `Core` is provided as a Docker container. Use the `czertainly/czertainly-core:tagname` to pull the required image from the repository. It can be configured using the following environment variables:
 
-| Variable                          | Description                                                         | Required                                          | Default value     |
-|-----------------------------------|---------------------------------------------------------------------|---------------------------------------------------|-------------------|
-| `JDBC_URL`                        | JDBC URL for database access                                        | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
-| `JDBC_USERNAME`                   | Username to access the database                                     | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
-| `JDBC_PASSWORD`                   | Password to access the database                                     | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
-| `DB_SCHEMA`                       | Database schema to use                                              | ![](https://img.shields.io/badge/-NO-red.svg) | `core`            |
-| `PORT`                            | Port where the service is exposed                                   | ![](https://img.shields.io/badge/-NO-red.svg) | `8080`            |
-| `HEADER_NAME`                     | Name of the header where the certificate of the client can be found | ![](https://img.shields.io/badge/-NO-red.svg) | `ssl-client-cert` |
-| `HEADER_ENABLED`                  | True if the certificate should be get from the header               | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
-| `TS_PASSWORD`                     | Password for the trusted certificate store                          | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
-| `OPA_BASE_URL`                    | Base URL of the Open Policy Agent                                   | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
-| `AUTH_SERVICE_BASE_URL`           | Base URL of the authentication service                              | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
-| `AUTH_TOKEN_HEADER_NAME`          | Name of the header for the JSON ID content                          | ![](https://img.shields.io/badge/-NO-red.svg) |  `X-USERINFO`     |
-| `SCHEDULED_TASKS_ENABLED`         | Scheduled certificate status update enable / disable                | ![](https://img.shields.io/badge/-NO-red.svg) | `true`            |
-| `JAVA_OPTS`                       | Customize Java system properties for running application            | ![](https://img.shields.io/badge/-NO-red.svg) | `N/A`             |
-| `TRUSTED_CERTIFICATES`            | List of PEM encoded additional trusted certificates                 | ![](https://img.shields.io/badge/-NO-red.svg) | `N/A`             |
-| `SCHEDULER_BASE_URL`              | Base URL of the scheduler service                                   | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
-| `BROKER_URL`                      | Message broker url (include protocol, f.e. amqp://localhost:5672)   | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
-| `BROKER_USERNAME`                 | Message broker username                                             | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
-| `BROKER_PASSWORD`                 | Message broker password                                             | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
-| `SETTINGS_CACHE_REFRESH_INTERVAL` | Interval of scheduled settings cache refresh from DB (in seconds)   | ![](https://img.shields.io/badge/-NO-red.svg) | 30                |)
+| Variable                | Description                                                           | Required                                           | Default value     |
+|-------------------------|-----------------------------------------------------------------------|----------------------------------------------------|-------------------|
+| `JDBC_URL`              | JDBC URL for database access                                          | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `JDBC_USERNAME`         | Username to access the database                                       | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `JDBC_PASSWORD`         | Password to access the database                                       | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `DB_SCHEMA`             | Database schema to use                                                | ![](https://img.shields.io/badge/-NO-red.svg)      | `core`            |
+| `PORT`                  | Port where the service is exposed                                     | ![](https://img.shields.io/badge/-NO-red.svg)      | `8080`            |
+| `HEADER_NAME`           | Name of the header where the certificate of the client can be found   | ![](https://img.shields.io/badge/-NO-red.svg)      | `ssl-client-cert` |
+| `HEADER_ENABLED`        | True if the certificate should be get from the header                 | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `TS_PASSWORD`           | Password for the trusted certificate store                            | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `OPA_BASE_URL`          | Base URL of the Open Policy Agent                                     | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `AUTH_SERVICE_BASE_URL` | Base URL of the authentication service                                | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `AUTH_TOKEN_HEADER_NAME` | Name of the header for the JSON ID content                            | ![](https://img.shields.io/badge/-NO-red.svg)      | `X-USERINFO`      |
+| `SCHEDULED_TASKS_ENABLED` | Scheduled certificate status update enable / disable                  | ![](https://img.shields.io/badge/-NO-red.svg)      | `true`            |
+| `JAVA_OPTS`             | Customize Java system properties for running application              | ![](https://img.shields.io/badge/-NO-red.svg)      | `N/A`             |
+| `TRUSTED_CERTIFICATES`  | List of PEM encoded additional trusted certificates                   | ![](https://img.shields.io/badge/-NO-red.svg)      | `N/A`             |
+| `SCHEDULER_BASE_URL`    | Base URL of the scheduler service                                     | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `BROKER_NAME`           | Message broker name - supported values are `SERVICEBUS` or `RABBITMQ` | ![](https://img.shields.io/badge/-NO-red.svg)      | `SERVICEBUS`      |
+| `BROKER_URL`            | Message broker url (include protocol, f.e. amqp://localhost:5672)     | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `BROKER_USERNAME`       | Message broker username                                               | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `BROKER_PASSWORD`       | Message broker password                                               | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `SETTINGS_CACHE_REFRESH_INTERVAL` | Interval of scheduled settings cache refresh from DB (in seconds)     | ![](https://img.shields.io/badge/-NO-red.svg)      | 30                |)
 
 `RABBITMQ_VHOST` has been removed and can be added to queue name.
 

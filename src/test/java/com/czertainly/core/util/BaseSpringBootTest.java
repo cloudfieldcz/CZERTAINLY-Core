@@ -3,6 +3,7 @@ package com.czertainly.core.util;
 import com.czertainly.api.model.core.auth.UserDto;
 import com.czertainly.api.model.core.auth.UserProfileDto;
 import com.czertainly.api.model.core.logging.enums.AuthMethod;
+import com.czertainly.core.TestJmsTemplateMockConfig;
 import com.czertainly.core.security.authn.CzertainlyAuthenticationToken;
 import com.czertainly.core.security.authn.CzertainlyUserDetails;
 import com.czertainly.core.security.authn.client.AuthenticationInfo;
@@ -28,7 +29,7 @@ import java.util.List;
 import java.util.UUID;
 
 @SpringBootTest
-@Import(SpringBootTestContext.class)
+@Import({SpringBootTestContext.class, TestJmsTemplateMockConfig.class})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class BaseSpringBootTest {
 

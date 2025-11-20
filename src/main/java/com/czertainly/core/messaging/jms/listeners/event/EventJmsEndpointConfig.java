@@ -18,24 +18,10 @@ public class EventJmsEndpointConfig extends AbstractJmsEndpointConfig<EventMessa
     private final MessagingProperties messagingProperties;
     private final MessagingConcurrencyProperties messagingConcurrencyProperties;
 
-//    @Autowired
-//    public void setMessageConverter(MessageConverter messageConverter) {
-//        this.messageConverter = messageConverter;
-//    }
-//
-//    @Autowired
-//    public void setListenerMessageProcessor(MessageProcessor<EventMessage> listenerMessageProcessor) {
-//        this.listenerMessageProcessor = listenerMessageProcessor;
-//    }
-//    @Autowired
-//    public void setJmsRetryTemplate(RetryTemplate jmsRetryTemplate) {
-//        this.jmsRetryTemplate = jmsRetryTemplate;
-//    }
-
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "eventListener",
-                messagingProperties::destinationEvent,
+                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS ? messagingProperties.exchange() : messagingProperties.queue().event(),
                 () -> messagingProperties.routingKey().event(),
                 messagingConcurrencyProperties::events,
                 EventMessage.class

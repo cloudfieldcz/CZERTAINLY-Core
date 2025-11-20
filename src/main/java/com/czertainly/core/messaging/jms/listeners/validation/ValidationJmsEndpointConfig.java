@@ -17,25 +17,10 @@ public class ValidationJmsEndpointConfig extends AbstractJmsEndpointConfig<Valid
     private final MessagingProperties messagingProperties;
     private final MessagingConcurrencyProperties messagingConcurrencyProperties;
 
-//    @Autowired
-//    public void setMessageConverter(MessageConverter messageConverter) {
-//        this.messageConverter = messageConverter;
-//    }
-//
-//    @Autowired
-//    public void setListenerMessageProcessor(MessageProcessor<ValidationMessage> listenerMessageProcessor) {
-//        this.listenerMessageProcessor = listenerMessageProcessor;
-//    }
-//
-//    @Autowired
-//    public void setJmsRetryTemplate(RetryTemplate jmsRetryTemplate) {
-//        this.jmsRetryTemplate = jmsRetryTemplate;
-//    }
-
     public SimpleJmsListenerEndpoint listenerEndpoint() {
-        return this.listenerEndpointInternal(
+        return listenerEndpointInternal(
                 () -> "validationListener",
-                messagingProperties::destinationValidation,
+                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS ? messagingProperties.exchange() : messagingProperties.queue().validation(),
                 () -> messagingProperties.routingKey().validation(),
                 messagingConcurrencyProperties::validation,
                 ValidationMessage.class

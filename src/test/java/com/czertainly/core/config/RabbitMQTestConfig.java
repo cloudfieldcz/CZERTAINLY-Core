@@ -5,14 +5,16 @@ import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import org.testcontainers.containers.Network;
 import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.utility.MountableFile;
 
-import java.sql.SQLException;
+import java.io.IOException;
 
 public class RabbitMQTestConfig {
 
     @Value("${spring.rabbitmq.port}")
-    private String port;
+    protected String port;
 
     @Value("${spring.rabbitmq.username}")
     private String user;
@@ -21,22 +23,43 @@ public class RabbitMQTestConfig {
     private String pass;
 
     @Bean
-    public RabbitMQContainer setupRabbit() throws SQLException {
-        int port = Integer.parseInt(this.port);
-        RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:4.2.0-management")
+    public RabbitMQContainer setupRabbit() throws IOException, InterruptedException {
+        return createRabbitMQContainer(null, port, user, pass);
+    }
+
+    public static RabbitMQContainer createRabbitMQContainer(Network network, String portStr, String user, String pass) throws IOException, InterruptedException {
+        int port = Integer.parseInt(portStr);
+        RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:4.2-management")
                 .withExposedPorts(port)
                 .withAdminUser(user)
                 .withAdminPassword(pass)
-                .withCreateContainerCmdModifier(cmd ->
-                        cmd.getHostConfig().withPortBindings(
-                                new PortBinding(
-                                        Ports.Binding.bindPort(port),
-                                        new ExposedPort(port)
-                                )
-                        )
-                )
-                ;
+                .withNetworkAliases("broker") // default alias
+                .withCopyFileToContainer(
+                        MountableFile.forClasspathResource("/rabbitMQ-definitions.json"),
+                        "/etc/rabbitmq/definitions.json"
+                );
+        if (network == null) {
+            rabbit.withCreateContainerCmdModifier(cmd ->
+                    cmd.getHostConfig().withPortBindings(
+                            new PortBinding(
+                                    Ports.Binding.bindPort(port),
+                                    new ExposedPort(port)
+                            ),
+                            new PortBinding(
+                                    Ports.Binding.bindPort(15672),
+                                    new ExposedPort(15672)
+                            )
+                    )
+            );
+        }
+
+        if (network != null) {
+            rabbit.withNetwork(network);
+            rabbit.withNetworkAliases("broker", "rabbitmq");
+        }
+
         rabbit.start();
+        rabbit.execInContainer("rabbitmqctl", "import_definitions", "/etc/rabbitmq/definitions.json");
         return rabbit;
     }
 }

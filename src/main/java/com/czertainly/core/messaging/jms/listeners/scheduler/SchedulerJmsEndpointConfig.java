@@ -17,24 +17,10 @@ public class SchedulerJmsEndpointConfig extends AbstractJmsEndpointConfig<Schedu
     private final MessagingProperties messagingProperties;
     private final MessagingConcurrencyProperties messagingConcurrencyProperties;
 
-//    @Autowired
-//    public void setMessageConverter(MessageConverter messageConverter) {
-//        this.messageConverter = messageConverter;
-//    }
-//
-//    @Autowired
-//    public void setListenerMessageProcessor(MessageProcessor<SchedulerJobExecutionMessage> listenerMessageProcessor) {
-//        this.listenerMessageProcessor = listenerMessageProcessor;
-//    }
-//    @Autowired
-//    public void setJmsRetryTemplate(RetryTemplate jmsRetryTemplate) {
-//        this.jmsRetryTemplate = jmsRetryTemplate;
-//    }
-
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "schedulerListener",
-                messagingProperties::destinationScheduler,
+                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS ? messagingProperties.exchange() : messagingProperties.queue().scheduler(),
                 () -> messagingProperties.routingKey().scheduler(),
                 messagingConcurrencyProperties::scheduler,
                 SchedulerJobExecutionMessage.class

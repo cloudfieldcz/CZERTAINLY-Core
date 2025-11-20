@@ -3,6 +3,7 @@ package com.czertainly.core;
 import org.mockito.Mockito;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jms.core.JmsTemplate;
 
@@ -17,10 +18,11 @@ import org.springframework.jms.core.JmsTemplate;
  * The {@link JmsTemplate} returned by this configuration is a mocked instance created using {@link Mockito}.
  */
 @Configuration
-@Profile("test & !messaging-int-test")
+@Profile("test & !(messaging-int-test & toxiproxy-messaging-int-test)")
 public class TestJmsTemplateMockConfig {
 
     @Bean
+    @Primary
     public JmsTemplate jmsTemplate() {
         return Mockito.mock(JmsTemplate.class);
     }

@@ -9,37 +9,50 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "spring.messaging", ignoreInvalidFields = true, ignoreUnknownFields = true)
 @Validated
 public record MessagingProperties(
+        @NotNull BrokerName name,
         @NotBlank String brokerUrl,
         @NotBlank String exchange,
-        @NotNull @Valid Queue queue,
+        String exchangePrefix,
         @NotBlank String user,
         @NotBlank String password,
         @Valid Listener listener,
         @Valid Producer producer,
+        @Valid Queue queue,
         @NotNull @Valid RoutingKey routingKey
 ) {
-    public String destinationActions() {
-        return exchange() + "." + queue().actions();
+    private String producerDestination(String routingKey) {
+        if (name == BrokerName.SERVICEBUS) {
+            return exchange();
+        }
+
+        if (exchangePrefix != null) {
+            return exchangePrefix + exchange() + "/" + routingKey;
+        }
+        return exchange() + "/" + routingKey;
     }
 
-    public String destinationAuditLogs() {
-        return exchange() + "." + queue().auditLogs();
+    public String produceDestinationActions() {
+        return producerDestination(routingKey().actions());
     }
 
-    public String destinationEvent() {
-        return exchange() + "." + queue().event();
+    public String produceDestinationAuditLogs() {
+        return producerDestination(routingKey().auditLogs());
     }
 
-    public String destinationNotifications() {
-        return exchange() + "." + queue().notification();
+    public String produceDestinationEvent() {
+        return producerDestination(routingKey().event());
     }
 
-    public String destinationScheduler() {
-        return exchange() + "." + queue().scheduler();
+    public String produceDestinationNotifications() {
+        return producerDestination(routingKey().notification());
     }
 
-    public String destinationValidation() {
-        return exchange() + "." + queue().validation();
+    public String produceDestinationScheduler() {
+        return producerDestination(routingKey().scheduler());
+    }
+
+    public String produceDestinationValidation() {
+        return producerDestination(routingKey().validation());
     }
 
     public record Queue (
@@ -75,4 +88,9 @@ public record MessagingProperties(
             Long maxInterval,
             Long multiplier
     ) {}
+
+    public enum BrokerName {
+        RABBITMQ,
+        SERVICEBUS
+    }
 }
