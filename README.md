@@ -83,6 +83,18 @@ Operations can be automated by the `Core`, but also can be performed manually by
 | `BROKER_URL`            | Message broker url (include protocol, f.e. amqp://localhost:5672)     | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
 | `BROKER_USERNAME`       | Message broker username                                               | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
 | `BROKER_PASSWORD`       | Message broker password                                               | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`             |
+| `BROKER_EXCHANGE`       | Message broker exchange name                                          | ![](https://img.shields.io/badge/-NO-red.svg)      | `czertainly`      |
+| `BROKER_QUEUE_AUDIT_LOGS`   | Queue name for audit logs (for RabitMQ only)                          | ![](https://img.shields.io/badge/-NO-red.svg)      | `core.audit-logs` |
+| `BROKER_QUEUE_EVENT`        | Queue name for events (for RabitMQ only)                                                 | ![](https://img.shields.io/badge/-NO-red.svg)      | `core.event`      |
+| `BROKER_QUEUE_NOTIFICATION` | Queue name for notifications (for RabitMQ only)                                          | ![](https://img.shields.io/badge/-NO-red.svg)      | `core.notification`|
+| `BROKER_QUEUE_SCHEDULER`    | Queue name for scheduler (for RabitMQ only)                                              | ![](https://img.shields.io/badge/-NO-red.svg)      | `core.scheduler`  |
+| `BROKER_QUEUE_VALIDATION`   | Queue name for validation (for RabitMQ only)                                             | ![](https://img.shields.io/badge/-NO-red.svg)      | `core.validation` |
+| `BROKER_ROUTINGKEY_ACTIONS` | Routing key for actions                                               | ![](https://img.shields.io/badge/-NO-red.svg)      | `actions`         |
+| `BROKER_ROUTINGKEY_AUDIT_LOGS` | Routing key for audit logs                                            | ![](https://img.shields.io/badge/-NO-red.svg)      | `auditlogs`       |
+| `BROKER_ROUTINGKEY_EVENT` | Routing key for events                                                | ![](https://img.shields.io/badge/-NO-red.svg)      | `event`           |
+| `BROKER_ROUTINGKEY_NOTIFICATION` | Routing key for notifications                                         | ![](https://img.shields.io/badge/-NO-red.svg)      | `notification`    |
+| `BROKER_ROUTINGKEY_SCHEDULER` | Routing key for scheduler                                             | ![](https://img.shields.io/badge/-NO-red.svg)      | `scheduler`       |
+| `BROKER_ROUTINGKEY_VALIDATION` | Routing key for validation                                            | ![](https://img.shields.io/badge/-NO-red.svg)      | `validation`      |
 | `SETTINGS_CACHE_REFRESH_INTERVAL` | Interval of scheduled settings cache refresh from DB (in seconds)     | ![](https://img.shields.io/badge/-NO-red.svg)      | 30                |)
 
 `RABBITMQ_VHOST` has been removed and can be added to queue name.
