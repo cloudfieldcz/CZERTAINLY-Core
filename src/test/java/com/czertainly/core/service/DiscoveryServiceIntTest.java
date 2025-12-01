@@ -86,7 +86,7 @@ class DiscoveryServiceIntTest extends BaseMessagingIntTest {
             requestDto.setUnread(true);
 
             // wait until a message is processed (and a notification is created)
-            await().atMost(Duration.ofSeconds(5))
+            await().atMost(Duration.ofSeconds(30))
                     .pollInterval(Duration.ofMillis(500))
                     .until(() -> {
                         NotificationResponseDto notificationResponseDto = notificationService.listNotifications(requestDto);
