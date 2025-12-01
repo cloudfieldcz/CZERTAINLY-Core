@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @AllArgsConstructor
-public class ActionsProducer {
+public class ActionProducer {
     private final JmsTemplate jmsTemplate;
     private final MessagingProperties messagingProperties;
     private final RetryTemplate retryTemplate;

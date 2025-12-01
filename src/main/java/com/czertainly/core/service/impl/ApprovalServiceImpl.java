@@ -16,7 +16,7 @@ import com.czertainly.core.dao.repository.ApprovalRepository;
 import com.czertainly.core.dao.repository.ApprovalStepRepository;
 import com.czertainly.core.events.handlers.ApprovalClosedEventHandler;
 import com.czertainly.core.events.handlers.ApprovalRequestedEventHandler;
-import com.czertainly.core.messaging.jms.producers.ActionsProducer;
+import com.czertainly.core.messaging.jms.producers.ActionProducer;
 import com.czertainly.core.messaging.jms.producers.EventProducer;
 import com.czertainly.core.messaging.model.ActionMessage;
 import com.czertainly.core.model.auth.ResourceAction;
@@ -54,7 +54,7 @@ public class ApprovalServiceImpl implements ApprovalService {
 
     private ApprovalRecipientHelper approvalRecipientHelper;
 
-    private ActionsProducer actionProducer;
+    private ActionProducer actionProducer;
 
     private EventProducer eventProducer;
 
@@ -345,7 +345,7 @@ public class ApprovalServiceImpl implements ApprovalService {
     }
 
     @Autowired
-    public void setActionProducer(ActionsProducer actionProducer) {
+    public void setActionProducer(ActionProducer actionProducer) {
         this.actionProducer = actionProducer;
     }
 
