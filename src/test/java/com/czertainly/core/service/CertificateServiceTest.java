@@ -510,7 +510,8 @@ class CertificateServiceTest extends BaseSpringBootTest {
     void testBulkRemove() throws NotFoundException {
         RemoveCertificateDto request = new RemoveCertificateDto();
         request.setUuids(List.of(certificate.getUuid().toString()));
-        certificateService.deleteCertificate(certificate.getSecuredUuid());
+
+        certificateService.bulkDeleteCertificate(SecurityFilter.create(), request);
 
         Assertions.assertThrows(NotFoundException.class, () -> certificateService.getCertificate(certificate.getSecuredUuid()));
     }
@@ -555,23 +556,9 @@ class CertificateServiceTest extends BaseSpringBootTest {
         MultipleCertificateObjectUpdateDto request = new MultipleCertificateObjectUpdateDto();
         request.setCertificateUuids(List.of(certificateNew.getUuid().toString()));
         request.setGroupUuids(List.of(group.getUuid().toString()));
-        // call of the @Async function
         certificateService.bulkUpdateCertificatesObjects(SecurityFilter.create(), request);
 
-        CertificateDetailDto detailDto = null;
-        for (int i = 0; i < 50; i++) {
-            // checking until Async function call fulfilled
-            detailDto = certificateService.getCertificate(certificateNew.getSecuredUuid());
-            if (detailDto.getGroups() != null && !detailDto.getGroups().isEmpty()) {
-                break;
-            }
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                throw new RuntimeException("Condition not met in 5s.", e);
-            }
-        }
-
+        CertificateDetailDto detailDto = certificateService.getCertificate(certificateNew.getSecuredUuid());
         Assertions.assertEquals(1, detailDto.getGroups().size());
         Assertions.assertEquals(group.getUuid().toString(), detailDto.getGroups().getFirst().getUuid());
     }

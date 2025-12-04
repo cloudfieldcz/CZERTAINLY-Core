@@ -1,25 +1,14 @@
 package com.czertainly.core;
 
-import com.czertainly.api.exception.EventException;
 import com.czertainly.api.model.core.auth.Resource;
-import com.czertainly.api.model.core.logging.enums.AuditLogOutput;
-import com.czertainly.api.model.core.logging.records.ActorRecord;
-import com.czertainly.api.model.core.logging.records.LogRecord;
-import com.czertainly.api.model.core.logging.records.ResourceRecord;
 import com.czertainly.api.model.core.other.ResourceEvent;
-import com.czertainly.core.messaging.model.AuditLogMessage;
 import com.czertainly.core.messaging.model.EventMessage;
 import eu.rekawek.toxiproxy.model.ToxicDirection;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.util.UUID;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.refEq;
 
 public class JmsNetworkChaosTest extends JmsResilienceTests {
 
@@ -139,45 +128,5 @@ public class JmsNetworkChaosTest extends JmsResilienceTests {
             exceptionThrown = true;
         }
         Assertions.assertFalse(exceptionThrown);
-    }
-
-    @Test
-    @Disabled
-    void testConsumeWithLatency() throws IOException, EventException {
-        AuditLogMessage auditLogMessage = new AuditLogMessage(
-                LogRecord.builder()
-                        .audited(true)
-                        .message("test audit log")
-                        .resource(ResourceRecord.builder().type(Resource.CERTIFICATE).build())
-                        .actor(ActorRecord.builder().build())
-                        .build(),
-                AuditLogOutput.DATABASE
-        );
-
-        proxy.toxics().latency("latency", ToxicDirection.DOWNSTREAM, 2500);
-
-        auditLogsProducer.sendMessage(auditLogMessage);
-        Mockito.verify(auditLogService).log(any(LogRecord.class), any(AuditLogOutput.class));
-
-    }
-
-    @Test
-    @Disabled
-    void testConsumeWithLatencyHighJitter() throws IOException {
-        EventMessage eventMessage = new EventMessage(ResourceEvent.CERTIFICATE_DISCOVERED, Resource.DISCOVERY, UUID.randomUUID(), "testData");
-        eventProducer.sendMessage(eventMessage);
-        proxy.toxics().latency("latency-and-jitter", ToxicDirection.DOWNSTREAM, 2500).setJitter(500);
-
-        Mockito.verify(eventListener, Mockito.timeout(5000)).processMessage(refEq(eventMessage));
-    }
-
-    @Test
-    @Disabled
-    void testConsumeWithPeerReset() throws IOException {
-        EventMessage eventMessage = new EventMessage(ResourceEvent.CERTIFICATE_DISCOVERED, Resource.DISCOVERY, UUID.randomUUID(), "testData");
-        eventProducer.sendMessage(eventMessage);
-        proxy.toxics().resetPeer("peer-reset", ToxicDirection.DOWNSTREAM, 1000);
-
-        Mockito.verify(eventListener, Mockito.timeout(5000)).processMessage(refEq(eventMessage));
     }
 }

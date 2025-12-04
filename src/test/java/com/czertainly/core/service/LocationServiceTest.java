@@ -38,7 +38,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.security.InvalidKeyException;
@@ -351,7 +350,6 @@ class LocationServiceTest extends BaseSpringBootTest {
     }
 
     @Test
-    @Transactional
     void testEnableLocation() throws NotFoundException {
         locationService.enableLocation(location.getEntityInstanceReference().getSecuredParentUuid(), location.getSecuredUuid());
         Assertions.assertEquals(true, location.getEnabled());
@@ -363,7 +361,6 @@ class LocationServiceTest extends BaseSpringBootTest {
     }
 
     @Test
-    @Transactional
     void testDisableLocation() throws NotFoundException {
         locationService.disableLocation(location.getEntityInstanceReference().getSecuredParentUuid(), location.getSecuredUuid());
         Assertions.assertFalse(locationService.getLocation(SecuredParentUUID.fromUUID(location.getEntityInstanceReferenceUuid()), location.getSecuredUuid()).isEnabled());
