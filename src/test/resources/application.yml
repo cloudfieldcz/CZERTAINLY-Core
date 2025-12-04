@@ -45,8 +45,6 @@ server:
     enabled: false
 
 spring:
-  main:
-    allow-bean-definition-overriding: true
   datasource:
     driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
     hikari:

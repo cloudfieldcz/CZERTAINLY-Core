@@ -35,7 +35,10 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.jetbrains.annotations.NotNull;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -546,16 +549,29 @@ class CertificateServiceTest extends BaseSpringBootTest {
     }
 
     @Test
-    @Disabled
     void bulkUpdate() throws CertificateException, com.czertainly.api.exception.CertificateException, NotFoundException, IOException {
         Certificate certificateNew = certificateService.createCertificate(Base64.getEncoder().encodeToString(x509Cert.getEncoded()), CertificateType.X509);
 
         MultipleCertificateObjectUpdateDto request = new MultipleCertificateObjectUpdateDto();
         request.setCertificateUuids(List.of(certificateNew.getUuid().toString()));
         request.setGroupUuids(List.of(group.getUuid().toString()));
+        // call of the @Async function
         certificateService.bulkUpdateCertificatesObjects(SecurityFilter.create(), request);
 
-        CertificateDetailDto detailDto = certificateService.getCertificate(certificateNew.getSecuredUuid());
+        CertificateDetailDto detailDto = null;
+        for (int i = 0; i < 50; i++) {
+            // checking until Async function call fulfilled
+            detailDto = certificateService.getCertificate(certificateNew.getSecuredUuid());
+            if (detailDto.getGroups() != null && !detailDto.getGroups().isEmpty()) {
+                break;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                throw new RuntimeException("Condition not met in 5s.", e);
+            }
+        }
+
         Assertions.assertEquals(1, detailDto.getGroups().size());
         Assertions.assertEquals(group.getUuid().toString(), detailDto.getGroups().getFirst().getUuid());
     }

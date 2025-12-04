@@ -5,12 +5,14 @@ import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Profile;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.utility.MountableFile;
 
 import java.io.IOException;
 
+@Profile("!toxiproxy-messaging-int-test")
 public class RabbitMQTestConfig {
 
     @Value("${spring.rabbitmq.port}")
