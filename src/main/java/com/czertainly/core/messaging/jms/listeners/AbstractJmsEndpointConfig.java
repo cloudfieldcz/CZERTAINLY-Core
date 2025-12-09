@@ -2,12 +2,14 @@ package com.czertainly.core.messaging.jms.listeners;
 
 import com.czertainly.core.messaging.jms.configuration.JmsConfig;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.jms.JMSException;
+import jakarta.jms.TextMessage;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jms.config.SimpleJmsListenerEndpoint;
 import org.springframework.jms.listener.DefaultMessageListenerContainer;
 import org.springframework.jms.listener.MessageListenerContainer;
-import org.springframework.jms.support.converter.MessageConverter;
 import org.springframework.messaging.MessagingException;
 import org.springframework.retry.support.RetryTemplate;
 
@@ -20,7 +22,7 @@ public abstract class AbstractJmsEndpointConfig<T> {
     private static final Logger logger = getLogger(AbstractJmsEndpointConfig.class);
 
     @Autowired
-    protected MessageConverter messageConverter;
+    private ObjectMapper objectMapper;
     @Autowired
     protected MessageProcessor<T> listenerMessageProcessor;
     @Autowired
@@ -72,8 +74,8 @@ public abstract class AbstractJmsEndpointConfig<T> {
         endpoint.setMessageListener(jmsMessage -> {
             jmsRetryTemplate.execute(context -> {
                 try {
-                    Object converted = messageConverter.fromMessage(jmsMessage);
-                    T message = messageClass.cast(converted);
+                    String json = extractMessageText(jmsMessage, endpointId.get());
+                    T message = objectMapper.readValue(json, messageClass);
                     listenerMessageProcessor.processMessage(message);
                 } catch (Exception e) {
                     logger.error("Failed to process message in endpoint '{}': {}", endpointId.get(), e.getMessage(), e);
@@ -83,5 +85,17 @@ public abstract class AbstractJmsEndpointConfig<T> {
             });
         });
         return endpoint;
+    }
+
+    private String extractMessageText(jakarta.jms.Message jmsMessage, String endpointId) throws JMSException {
+        if (!(jmsMessage instanceof TextMessage textMessage)) {
+            throw new IllegalArgumentException("Expected TextMessage in endpoint '" + endpointId +
+                    "' but got: " + (jmsMessage != null ? jmsMessage.getClass().getName() : "null"));
+        }
+        String text = textMessage.getText();
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException("Received empty message body in endpoint '" + endpointId + "'");
+        }
+        return text;
     }
 }
