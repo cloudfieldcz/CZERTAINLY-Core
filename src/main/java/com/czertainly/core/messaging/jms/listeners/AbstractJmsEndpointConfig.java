@@ -2,16 +2,22 @@ package com.czertainly.core.messaging.jms.listeners;
 
 import com.czertainly.core.messaging.jms.configuration.JmsConfig;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jms.config.SimpleJmsListenerEndpoint;
 import org.springframework.jms.listener.DefaultMessageListenerContainer;
 import org.springframework.jms.listener.MessageListenerContainer;
 import org.springframework.jms.support.converter.MessageConverter;
+import org.springframework.messaging.MessagingException;
 import org.springframework.retry.support.RetryTemplate;
 
 import java.util.function.Supplier;
 
+import static org.slf4j.LoggerFactory.getLogger;
+
 public abstract class AbstractJmsEndpointConfig<T> {
+
+    private static final Logger logger = getLogger(AbstractJmsEndpointConfig.class);
 
     @Autowired
     protected MessageConverter messageConverter;
@@ -46,7 +52,7 @@ public abstract class AbstractJmsEndpointConfig<T> {
                         container.setSubscriptionShared(true);// Shared must be set to allow concurrency
                         container.setClientId(endpointId.get());
                         container.setSubscriptionDurable(true);
-                        container.setDurableSubscriptionName(endpointId.get());
+                        container.setDurableSubscriptionName(routingKey.get());
                     }
                 }
             };
@@ -70,7 +76,8 @@ public abstract class AbstractJmsEndpointConfig<T> {
                     T message = messageClass.cast(converted);
                     listenerMessageProcessor.processMessage(message);
                 } catch (Exception e) {
-                    throw new RuntimeException("Failed to convert JMS message", e);
+                    logger.error("Failed to process message in endpoint '{}': {}", endpointId.get(), e.getMessage(), e);
+                    throw new MessagingException("Message processing failed in endpoint: " + endpointId.get(), e);
                 }
                 return null;
             });
