@@ -1,0 +1,75 @@
+package com.czertainly.core.messaging.proxy;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+
+import java.time.Duration;
+
+/**
+ * Configuration properties for the proxy client.
+ * These properties control how the ProxyClient communicates with connectors
+ * via the message queue proxy.
+ */
+@ConfigurationProperties(prefix = "proxy", ignoreInvalidFields = true, ignoreUnknownFields = true)
+@Validated
+public record ProxyProperties(
+        /**
+         * Azure Service Bus / RabbitMQ topic name for proxy communication.
+         * Default: czertainly-proxy
+         */
+        String topic,
+
+        /**
+         * Subscription name for receiving responses from proxy.
+         * Default: core
+         */
+        String responseSubscription,
+
+        /**
+         * Default request timeout duration.
+         * Default: 30 seconds
+         */
+        Duration requestTimeout,
+
+        /**
+         * Maximum number of pending requests allowed.
+         * Prevents memory issues from too many outstanding requests.
+         * Default: 1000
+         */
+        Integer maxPendingRequests
+) {
+    /**
+     * Default constructor with default values.
+     */
+    public ProxyProperties {
+        if (topic == null) {
+            topic = "czertainly-proxy";
+        }
+        if (responseSubscription == null) {
+            responseSubscription = "core";
+        }
+        if (requestTimeout == null) {
+            requestTimeout = Duration.ofSeconds(30);
+        }
+        if (maxPendingRequests == null) {
+            maxPendingRequests = 1000;
+        }
+    }
+
+    /**
+     * Get the request routing key/subject for a specific proxy instance.
+     * @param proxyId The proxy instance ID
+     * @return Routing key in format "request.{proxyId}"
+     */
+    public String getRequestRoutingKey(String proxyId) {
+        return "request." + proxyId;
+    }
+
+    /**
+     * Get the response routing key pattern.
+     * @return Pattern for matching all responses "response%"
+     */
+    public String getResponseRoutingKeyPattern() {
+        return "response%";
+    }
+}

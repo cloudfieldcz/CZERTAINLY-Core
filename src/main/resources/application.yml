@@ -173,6 +173,13 @@ messaging:
     validation: 5
     audit-logs: 5
 
+# Proxy configuration for connector communication via message queue
+proxy:
+  topic: ${PROXY_TOPIC:czertainly-proxy}
+  response-subscription: ${PROXY_RESPONSE_SUBSCRIPTION:core}
+  request-timeout: ${PROXY_REQUEST_TIMEOUT:30s}
+  max-pending-requests: ${PROXY_MAX_PENDING_REQUESTS:1000}
+
 validation:
   crl:
     read-timeout: 2000

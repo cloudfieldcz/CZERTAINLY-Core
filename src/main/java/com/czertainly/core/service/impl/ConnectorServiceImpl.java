@@ -3,6 +3,7 @@ package com.czertainly.core.service.impl;
 import com.czertainly.api.clients.AttributeApiClient;
 import com.czertainly.api.clients.ConnectorApiClient;
 import com.czertainly.api.clients.HealthApiClient;
+import com.czertainly.api.clients.mq.ProxyClient;
 import com.czertainly.api.exception.*;
 import com.czertainly.api.model.client.attribute.RequestAttributeDto;
 import com.czertainly.api.model.client.connector.*;
@@ -47,6 +48,7 @@ public class ConnectorServiceImpl implements ConnectorService {
     private ConnectorApiClient connectorApiClient;
     private AttributeApiClient attributeApiClient;
     private HealthApiClient healthApiClient;
+    private com.czertainly.api.clients.mq.HealthApiClient mqHealthApiClient;
     private CredentialRepository credentialRepository;
     private AuthorityInstanceReferenceRepository authorityInstanceReferenceRepository;
     private EntityInstanceReferenceRepository entityInstanceReferenceRepository;
@@ -84,6 +86,11 @@ public class ConnectorServiceImpl implements ConnectorService {
     @Autowired
     public void setHealthApiClient(HealthApiClient healthApiClient) {
         this.healthApiClient = healthApiClient;
+    }
+
+    @Autowired(required = false)
+    public void setMqHealthApiClient(com.czertainly.api.clients.mq.HealthApiClient mqHealthApiClient) {
+        this.mqHealthApiClient = mqHealthApiClient;
     }
 
     @Autowired
@@ -222,6 +229,7 @@ public class ConnectorServiceImpl implements ConnectorService {
         connector.setAuthType(request.getAuthType());
         connector.setAuthAttributes(AttributeDefinitionUtils.serialize(authAttributes));
         connector.setStatus(connectorStatus);
+        connector.setProxyId(request.getProxyId());
         connectorRepository.save(connector);
 
         setFunctionGroups(functionGroupDtos, connector);
@@ -256,6 +264,7 @@ public class ConnectorServiceImpl implements ConnectorService {
         connector.setAuthType(request.getAuthType());
         connector.setAuthAttributes(AttributeDefinitionUtils.serialize(authAttributes));
         connector.setStatus(connectorStatus);
+        connector.setProxyId(request.getProxyId());
         connectorRepository.save(connector);
 
         setFunctionGroups(request.getFunctionGroups(), connector);
@@ -281,6 +290,8 @@ public class ConnectorServiceImpl implements ConnectorService {
             connector.setAuthType(request.getAuthType());
             connector.setAuthAttributes(AttributeDefinitionUtils.serialize(authAttributes));
         }
+        // proxyId can be set to null to switch back to REST, so we always update it
+        connector.setProxyId(request.getProxyId());
 
         connectorRepository.save(connector);
 
@@ -528,7 +539,17 @@ public class ConnectorServiceImpl implements ConnectorService {
         Connector connector = connectorRepository.findByUuid(uuid)
                 .orElseThrow(() -> new NotFoundException(Connector.class, uuid));
 
-        return healthApiClient.checkHealth(connector.mapToDto());
+        ConnectorDto connectorDto = connector.mapToDto();
+
+        // Use MQ-based health check if connector has proxyId set and MQ client is available
+        if (connector.getProxyId() != null && !connector.getProxyId().isBlank() && mqHealthApiClient != null) {
+            logger.debug("Using MQ-based health check for connector {} via proxy {}",
+                    connector.getName(), connector.getProxyId());
+            return mqHealthApiClient.checkHealth(connectorDto);
+        }
+
+        // Use REST-based health check
+        return healthApiClient.checkHealth(connectorDto);
     }
 
     @Override
