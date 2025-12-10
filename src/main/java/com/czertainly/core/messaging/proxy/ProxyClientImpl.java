@@ -1,0 +1,310 @@
+package com.czertainly.core.messaging.proxy;
+
+import com.czertainly.api.clients.mq.ProxyClient;
+import com.czertainly.api.clients.mq.model.ConnectorRequest;
+import com.czertainly.api.clients.mq.model.ProxyRequest;
+import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.exception.*;
+import com.czertainly.api.model.core.connector.ConnectorDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+/**
+ * Implementation of ProxyClient that communicates with connectors via message queue proxy.
+ *
+ * <p>Sends requests to a message queue topic where a proxy service forwards them to
+ * the actual connector via HTTP. Responses are received through a response queue
+ * and correlated using correlation IDs.</p>
+ */
+@Slf4j
+@Component
+public class ProxyClientImpl implements ProxyClient {
+
+    private final ProxyMessageProducer producer;
+    private final ProxyResponseCorrelator correlator;
+    private final ConnectorAuthConverter authConverter;
+    private final ObjectMapper objectMapper;
+    private final ProxyProperties proxyProperties;
+
+    public ProxyClientImpl(
+            ProxyMessageProducer producer,
+            ProxyResponseCorrelator correlator,
+            ConnectorAuthConverter authConverter,
+            ObjectMapper objectMapper,
+            ProxyProperties proxyProperties) {
+        this.producer = producer;
+        this.correlator = correlator;
+        this.authConverter = authConverter;
+        this.objectMapper = objectMapper;
+        this.proxyProperties = proxyProperties;
+        log.info("ProxyClientImpl initialized");
+    }
+
+    @Override
+    public <T> T sendRequest(
+            ConnectorDto connector,
+            String path,
+            String method,
+            Object body,
+            Class<T> responseType) throws ConnectorException {
+        return sendRequest(connector, path, method, body, responseType, proxyProperties.requestTimeout());
+    }
+
+    @Override
+    public <T> T sendRequest(
+            ConnectorDto connector,
+            String path,
+            String method,
+            Object body,
+            Class<T> responseType,
+            Duration timeout) throws ConnectorException {
+        return sendRequest(connector, path, method, null, body, responseType, timeout);
+    }
+
+    @Override
+    public <T> T sendRequest(
+            ConnectorDto connector,
+            String path,
+            String method,
+            Map<String, String> pathVariables,
+            Object body,
+            Class<T> responseType) throws ConnectorException {
+        return sendRequest(connector, path, method, pathVariables, body, responseType, proxyProperties.requestTimeout());
+    }
+
+    private <T> T sendRequest(
+            ConnectorDto connector,
+            String path,
+            String method,
+            Map<String, String> pathVariables,
+            Object body,
+            Class<T> responseType,
+            Duration timeout) throws ConnectorException {
+        try {
+            CompletableFuture<T> future = sendRequestAsync(
+                    connector, path, method, pathVariables, body, responseType, timeout);
+
+            return future.get(timeout.toMillis() + 5000, TimeUnit.MILLISECONDS);
+
+        } catch (TimeoutException e) {
+            throw new ConnectorCommunicationException(
+                    "Proxy request timed out after " + timeout, e, connector);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            // CompletableFuture.thenApply wraps thrown exceptions in CompletionException
+            if (cause instanceof java.util.concurrent.CompletionException ce && ce.getCause() != null) {
+                cause = ce.getCause();
+            }
+            if (cause instanceof ConnectorException ce) {
+                throw ce;
+            }
+            // Handle ValidationException and other RuntimeExceptions
+            if (cause instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new ConnectorCommunicationException(
+                    "Proxy request failed: " + cause.getMessage(), cause, connector);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ConnectorCommunicationException(
+                    "Proxy request interrupted", e, connector);
+        }
+    }
+
+    @Override
+    public <T> CompletableFuture<T> sendRequestAsync(
+            ConnectorDto connector,
+            String path,
+            String method,
+            Object body,
+            Class<T> responseType) {
+        return sendRequestAsync(connector, path, method, null, body, responseType, proxyProperties.requestTimeout());
+    }
+
+    @Override
+    public <T> CompletableFuture<T> sendRequestAsync(
+            ConnectorDto connector,
+            String path,
+            String method,
+            Object body,
+            Class<T> responseType,
+            Duration timeout) {
+        return sendRequestAsync(connector, path, method, null, body, responseType, timeout);
+    }
+
+    @Override
+    public <T> CompletableFuture<T> sendRequestAsync(
+            ConnectorDto connector,
+            String path,
+            String method,
+            Map<String, String> pathVariables,
+            Object body,
+            Class<T> responseType,
+            Duration timeout) {
+
+        String correlationId = UUID.randomUUID().toString();
+        String proxyId = connector.getProxyId();
+
+        if (proxyId == null || proxyId.isBlank()) {
+            throw new IllegalArgumentException("Connector proxyId must be set to use ProxyClient");
+        }
+
+        log.debug("Sending async proxy request correlationId={} proxyId={} method={} path={}",
+                correlationId, proxyId, method, path);
+
+        // Build the proxy request
+        ProxyRequest request = ProxyRequest.builder()
+                .correlationId(correlationId)
+                .messageType(method + ":" + path)
+                .timestamp(Instant.now())
+                .connectorRequest(ConnectorRequest.builder()
+                        .connectorUrl(connector.getUrl())
+                        .method(method)
+                        .path(path)
+                        .connectorAuth(authConverter.convert(connector))
+                        .pathVariables(pathVariables)
+                        .body(body)
+                        .timeout(formatTimeout(timeout))
+                        .build())
+                .build();
+
+        // Register for response BEFORE sending to avoid race condition
+        CompletableFuture<ProxyResponse> responseFuture = correlator.registerRequest(correlationId, timeout);
+
+        // Send the request
+        producer.send(request, proxyId);
+
+        // Transform the response
+        return responseFuture.thenApply(response -> handleResponse(response, responseType, connector));
+    }
+
+    /**
+     * Handle proxy response and transform to expected type.
+     */
+    private <T> T handleResponse(ProxyResponse response, Class<T> responseType, ConnectorDto connector) {
+        // Check for proxy-level errors
+        if (response.hasError()) {
+            throwProxyError(response, connector);
+        }
+
+        // Check HTTP status
+        int statusCode = response.getStatusCode();
+        if (statusCode >= 400) {
+            throwHttpError(response, connector);
+        }
+
+        // Handle void/null responses
+        if (responseType == Void.class || responseType == void.class || response.getBody() == null) {
+            return null;
+        }
+
+        // Deserialize the response body
+        try {
+            return objectMapper.convertValue(response.getBody(), responseType);
+        } catch (Exception e) {
+            sneakyThrow(new ConnectorCommunicationException(
+                    "Failed to deserialize proxy response body to " + responseType.getSimpleName(),
+                    e, connector));
+            return null; // Never reached, but needed for compiler
+        }
+    }
+
+    /**
+     * Sneaky throw helper to throw checked exceptions without declaring them.
+     * Used to throw ConnectorException from lambda contexts.
+     */
+    @SuppressWarnings("unchecked")
+    private static <E extends Throwable> void sneakyThrow(Throwable e) throws E {
+        throw (E) e;
+    }
+
+    /**
+     * Map proxy error category to appropriate exception and throw it.
+     * ValidationException is a RuntimeException so it's thrown directly.
+     * ConnectorException subtypes are thrown using sneakyThrow for lambda compatibility.
+     */
+    private void throwProxyError(ProxyResponse response, ConnectorDto connector) {
+        String errorCategory = response.getErrorCategory();
+        String errorMessage = response.getError();
+
+        if (errorCategory == null) {
+            sneakyThrow(new ConnectorException(errorMessage, connector));
+            return;
+        }
+
+        switch (errorCategory.toLowerCase()) {
+            case "validation" -> throw new ValidationException(errorMessage);
+
+            case "authentication" -> sneakyThrow(new ConnectorClientException(
+                    errorMessage, HttpStatus.UNAUTHORIZED, connector));
+
+            case "authorization" -> sneakyThrow(new ConnectorClientException(
+                    errorMessage, HttpStatus.FORBIDDEN, connector));
+
+            case "not_found" -> sneakyThrow(new ConnectorEntityNotFoundException(errorMessage));
+
+            case "timeout", "connection" -> sneakyThrow(new ConnectorCommunicationException(
+                    errorMessage, connector));
+
+            case "server_error" -> sneakyThrow(new ConnectorServerException(
+                    errorMessage,
+                    response.getStatusCode() > 0 ? HttpStatus.valueOf(response.getStatusCode()) : HttpStatus.INTERNAL_SERVER_ERROR,
+                    connector));
+
+            default -> sneakyThrow(new ConnectorException(errorMessage, connector));
+        }
+    }
+
+    /**
+     * Map HTTP status codes to appropriate exception and throw it.
+     * ValidationException is a RuntimeException so it's thrown directly.
+     * ConnectorException subtypes are thrown using sneakyThrow for lambda compatibility.
+     */
+    private void throwHttpError(ProxyResponse response, ConnectorDto connector) {
+        int statusCode = response.getStatusCode();
+        HttpStatus httpStatus = HttpStatus.resolve(statusCode);
+
+        if (httpStatus == null) {
+            httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+
+        String errorMessage = response.getError();
+        if (errorMessage == null || errorMessage.isBlank()) {
+            errorMessage = "HTTP " + statusCode + ": " + httpStatus.getReasonPhrase();
+        }
+
+        if (statusCode == 404) {
+            sneakyThrow(new ConnectorEntityNotFoundException(errorMessage));
+        } else if (statusCode == 422) {
+            throw new ValidationException(errorMessage);
+        } else if (httpStatus.is4xxClientError()) {
+            sneakyThrow(new ConnectorClientException(errorMessage, httpStatus, connector));
+        } else if (httpStatus.is5xxServerError()) {
+            sneakyThrow(new ConnectorServerException(errorMessage, httpStatus, connector));
+        } else {
+            sneakyThrow(new ConnectorException(errorMessage, connector));
+        }
+    }
+
+    /**
+     * Format timeout duration to Go duration format (e.g., "30s").
+     */
+    private String formatTimeout(Duration timeout) {
+        long seconds = timeout.toSeconds();
+        if (seconds > 0) {
+            return seconds + "s";
+        }
+        return timeout.toMillis() + "ms";
+    }
+}

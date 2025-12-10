@@ -51,6 +51,9 @@ public class Connector extends UniquelyIdentifiedAndAudited implements Serializa
     @Enumerated(EnumType.STRING)
     private ConnectorStatus status;
 
+    @Column(name = "proxy_id")
+    private String proxyId;
+
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "connector")
     @ToString.Exclude
     @JsonManagedReference
@@ -85,6 +88,7 @@ public class Connector extends UniquelyIdentifiedAndAudited implements Serializa
         dto.setAuthType(authType);
         dto.setAuthAttributes(AttributeDefinitionUtils.getResponseAttributes(AttributeDefinitionUtils.deserialize(this.authAttributes, BaseAttribute.class)));
         dto.setStatus(this.status);
+        dto.setProxyId(this.proxyId);
         dto.setFunctionGroups(this.functionGroups.stream().map(f -> {
             FunctionGroupDto functionGroupDto = f.getFunctionGroup().mapToDto();
             functionGroupDto.setKinds(MetaDefinitions.deserializeArrayString(f.getKinds()));
