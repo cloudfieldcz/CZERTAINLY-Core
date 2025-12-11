@@ -1,12 +1,14 @@
 package com.czertainly.core.messaging.jms.producers;
 
-import com.czertainly.core.messaging.jms.configuration.JmsConfig;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
 import com.czertainly.core.messaging.model.ActionMessage;
 import lombok.AllArgsConstructor;
 import org.springframework.jms.core.JmsTemplate;
+import org.springframework.lang.NonNull;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Component;
+
+import java.util.Objects;
 
 @Component
 @AllArgsConstructor
@@ -15,13 +17,15 @@ public class ActionProducer {
     private final MessagingProperties messagingProperties;
     private final RetryTemplate retryTemplate;
 
-    public void sendMessage(final ActionMessage actionMessage) {
+    public void sendMessage(@NonNull final ActionMessage actionMessage) {
+        Objects.requireNonNull(actionMessage, "Action message cannot be null");
+
         retryTemplate.execute(context -> {
             jmsTemplate.convertAndSend(
                     messagingProperties.produceDestinationActions(),
                     actionMessage,
                     message -> {
-                        message.setStringProperty(JmsConfig.ROUTING_KEY, messagingProperties.routingKey().actions());
+                        message.setJMSType(messagingProperties.routingKey().actions());
                         return message;
                     });
             return null;
