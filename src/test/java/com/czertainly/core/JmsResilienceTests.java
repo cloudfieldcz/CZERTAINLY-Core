@@ -1,28 +1,21 @@
 package com.czertainly.core;
 
-import com.czertainly.core.config.JmsResilienceConfig;
-import com.czertainly.core.config.RabbitMQTestConfig;
 import com.czertainly.core.messaging.jms.listeners.AuditLogsListener;
 import com.czertainly.core.messaging.jms.listeners.EventListener;
 import com.czertainly.core.messaging.jms.producers.AuditLogsProducer;
 import com.czertainly.core.messaging.jms.producers.EventProducer;
 import com.czertainly.core.service.impl.AuditLogServiceImpl;
-import com.czertainly.core.util.BaseMessagingIntTest;
+import com.czertainly.core.util.BaseSpringBootTest;
+import com.czertainly.core.util.RabbitMQContainerFactory;
 import eu.rekawek.toxiproxy.Proxy;
 import eu.rekawek.toxiproxy.ToxiproxyClient;
-import eu.rekawek.toxiproxy.model.Toxic;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
-import org.springframework.context.annotation.Profile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -39,29 +32,19 @@ import java.io.IOException;
 @Tag("chaos")
 @SpringBootTest
 @ActiveProfiles({"toxiproxy-messaging-int-test"})
-@Import(JmsResilienceConfig.class)
 @Testcontainers
-public abstract class JmsResilienceTests extends BaseMessagingIntTest {
+public abstract class JmsResilienceTests extends BaseSpringBootTest {
     protected static final Logger logger = LoggerFactory.getLogger(JmsResilienceTests.class);
 
-    private static final Network network = Network.newNetwork();
+    protected static final Network network = Network.newNetwork();
 
     @Container
-    protected static final RabbitMQContainer rabbitMQContainer;
-
-    static {
-        try {
-            rabbitMQContainer = RabbitMQTestConfig.createRabbitMQContainer(network, "5672", "guest", "guest");
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
+    protected static final RabbitMQContainer rabbitMQContainer = RabbitMQContainerFactory.create(network);
 
     @Container
     protected static final ToxiproxyContainer toxiproxy = new ToxiproxyContainer("ghcr.io/shopify/toxiproxy:2.5.0")
             .withNetwork(network)
             .dependsOn(rabbitMQContainer);
-
 
     protected static Proxy proxy;
 
@@ -78,36 +61,19 @@ public abstract class JmsResilienceTests extends BaseMessagingIntTest {
     protected AuditLogServiceImpl auditLogService;
 
     @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) throws IOException {
-
+    static void configureProperties(DynamicPropertyRegistry registry) throws IOException, InterruptedException {
+        // Import RabbitMQ definitions after the container starts
+        logger.info("Importing RabbitMQ definitions...");
+        RabbitMQContainerFactory.importDefinitions(rabbitMQContainer);
 
         ToxiproxyClient client = new ToxiproxyClient(toxiproxy.getHost(), toxiproxy.getControlPort());
         proxy = client.createProxy("amqp-proxy", "0.0.0.0:8666", "broker:5672");
+
         String proxyUrl = String.format("amqp://%s:%d", toxiproxy.getHost(), toxiproxy.getMappedPort(8666));
-
         registry.add("spring.messaging.broker-url", () -> proxyUrl);
-        registry.add("spring.rabbitmq.port", () -> toxiproxy.getMappedPort(8666));
-        registry.add("spring.rabbitmq.host", toxiproxy::getHost);
-    }
-
-    @TestConfiguration
-    @Profile("toxiproxy-messaging-int-test")
-    static class ToxiProxyRabbitConfig {
-
-        @Value("${spring.rabbitmq.port}")
-        private String port;
-
-        @Value("${spring.rabbitmq.username}")
-        private String user;
-
-        @Value("${spring.rabbitmq.password}")
-        private String pass;
-
-        @Bean
-        @Primary
-        public RabbitMQContainer setupRabbit() throws IOException, InterruptedException {
-            return RabbitMQTestConfig.createRabbitMQContainer(network, port, user, pass);
-        }
+        registry.add("spring.messaging.name", () -> "RABBITMQ");
+        registry.add("spring.messaging.user", rabbitMQContainer::getAdminUsername);
+        registry.add("spring.messaging.password", rabbitMQContainer::getAdminPassword);
     }
 
     @BeforeEach
@@ -115,9 +81,46 @@ public abstract class JmsResilienceTests extends BaseMessagingIntTest {
         ReflectionTestUtils.setField(auditLogsListener, "auditLogService", auditLogService);
 
         if (proxy != null) {
-            for (Toxic toxic : proxy.toxics().getAll()) {
-                toxic.remove();
+            proxy.toxics().getAll().forEach(toxic -> {
+                try {
+                    toxic.remove();
+                    logger.info("=== Toxic removed: {} ===", toxic.getName());
+                } catch (IOException e) {
+                    logger.warn("Failed to remove toxic: {}", toxic.getName(), e);
+                }
+            });
+        }
+    }
+
+    @AfterAll
+    static void cleanupResources() {
+        // First stop containers explicitly to ensure they release the network
+        try {
+            if (toxiproxy != null && toxiproxy.isRunning()) {
+                toxiproxy.stop();
+                logger.info("Toxiproxy container stopped");
             }
+        } catch (Exception e) {
+            logger.warn("Failed to stop toxiproxy: {}", e.getMessage());
+        }
+
+        try {
+            if (rabbitMQContainer != null && rabbitMQContainer.isRunning()) {
+                rabbitMQContainer.stop();
+                logger.info("RabbitMQ container stopped");
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to stop rabbitMQContainer: {}", e.getMessage());
+        }
+
+        // Then close the network after all containers are stopped
+        try {
+            if (network != null) {
+                network.close();
+                logger.info("Network closed");
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to close network: {}", e.getMessage());
         }
     }
 }

@@ -1,6 +1,5 @@
 package com.czertainly.core.messaging.jms.listeners;
 
-import com.czertainly.core.messaging.jms.configuration.JmsConfig;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.jms.JMSException;
@@ -20,6 +19,7 @@ import static org.slf4j.LoggerFactory.getLogger;
 public abstract class AbstractJmsEndpointConfig<T> {
 
     private static final Logger logger = getLogger(AbstractJmsEndpointConfig.class);
+    private static final String ROUTING_KEY = "routingKey";
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -66,7 +66,7 @@ public abstract class AbstractJmsEndpointConfig<T> {
 
         if (messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS) {
             endpoint.setSubscription(routingKey.get());
-            endpoint.setSelector(JmsConfig.ROUTING_KEY + " = '" + routingKey.get() + "'");
+            endpoint.setSelector(ROUTING_KEY + " = '" + routingKey.get() + "'");
         }
 
         endpoint.setDestination(destination.get());

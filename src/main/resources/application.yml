@@ -141,15 +141,15 @@ spring:
         max-interval: 10000
         multiplier: 2
     exchange: ${BROKER_EXCHANGE:czertainly}
-# for rabbitMQ
-#    exchange-prefix: ${BROKER_EXCHANGE_PREFIX}
-#    queue:
-#      actions: ${BROKER_QUEUE_ACTIONS:core.actions}
-#      audit-logs: ${BROKER_QUEUE_AUDIT_LOGS:core.audit-logs}
-#      event: ${BROKER_QUEUE_EVENT:core.event}
-#      notification: ${BROKER_QUEUE_NOTIFICATION:core.notification}
-#      scheduler: ${BROKER_QUEUE_SCHEDULER:core.scheduler}
-#      validation: ${BROKER_QUEUE_VALIDATION:core.validation}
+ # for rabbitMQ
+    exchange-prefix: ${BROKER_EXCHANGE_PREFIX:/exchanges/}
+    queue:
+      actions: ${BROKER_QUEUE_ACTIONS:core.actions}
+      audit-logs: ${BROKER_QUEUE_AUDIT_LOGS:core.audit-logs}
+      event: ${BROKER_QUEUE_EVENT:core.event}
+      notification: ${BROKER_QUEUE_NOTIFICATION:core.notification}
+      scheduler: ${BROKER_QUEUE_SCHEDULER:core.scheduler}
+      validation: ${BROKER_QUEUE_VALIDATION:core.validation}
     routing-key:
       actions: ${BROKER_ROUTINGKEY_ACTIONS:actions}
       audit-logs: ${BROKER_ROUTINGKEY_AUDIT_LOGS:auditlogs}

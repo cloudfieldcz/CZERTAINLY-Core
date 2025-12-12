@@ -3,10 +3,11 @@ package com.czertainly.core.messaging.jms.configuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
-@ConfigurationProperties(prefix = "spring.messaging", ignoreInvalidFields = true, ignoreUnknownFields = true)
+@ConfigurationProperties(prefix = "spring.messaging")
 @Validated
 public record MessagingProperties(
         @NotNull BrokerName name,
@@ -24,11 +25,7 @@ public record MessagingProperties(
         if (name == BrokerName.SERVICEBUS) {
             return exchange();
         }
-
-        if (exchangePrefix != null) {
-            return exchangePrefix + exchange() + "/" + routingKey;
-        }
-        return exchange() + "/" + routingKey;
+        return "/exchanges/" + exchange() + "/" + routingKey;
     }
 
     public String produceDestinationActions() {
@@ -78,16 +75,24 @@ public record MessagingProperties(
     ) {}
 
     public record Producer(
-            Retry retry
+            @NotNull @Valid Retry retry
     ) {}
 
     public record Retry(
-            Boolean enabled,
-            Long initialInterval,
-            Integer maxAttempts,
-            Long maxInterval,
-            Long multiplier
-    ) {}
+            @NotNull Boolean enabled,
+            @NotNull @Positive Long initialInterval,
+            @NotNull @Positive Integer maxAttempts,
+            @NotNull @Positive Long maxInterval,
+            @NotNull @Positive Long multiplier
+    ) {
+        public Retry {
+            if (enabled == null) enabled = true;
+            if (initialInterval == null) initialInterval = 3000L;
+            if (maxAttempts == null) maxAttempts = 3;
+            if (maxInterval == null) maxInterval = 10000L;
+            if (multiplier == null) multiplier = 2L;
+        }
+    }
 
     public enum BrokerName {
         RABBITMQ,

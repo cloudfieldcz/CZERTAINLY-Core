@@ -1,23 +1,56 @@
 package com.czertainly.core.util;
 
-import com.czertainly.core.config.RabbitMQTestConfig;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.io.IOException;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
-@Import(RabbitMQTestConfig.class)
-@ActiveProfiles({"messaging-int-test"})
-public class BaseMessagingIntTest extends BaseSpringBootTest {
+@ActiveProfiles(value = {"messaging-int-test"})
+@Testcontainers
+public abstract class BaseMessagingIntTest extends BaseSpringBootTest {
 
-    @Autowired
-    RabbitMQContainer rabbit;
+    protected static final Logger logger = LoggerFactory.getLogger(BaseMessagingIntTest.class);
+
+    @Container
+    protected static final RabbitMQContainer rabbitMQContainer = RabbitMQContainerFactory.create();
+
+    @DynamicPropertySource
+    static void rabbitMQProperties(DynamicPropertyRegistry registry) throws IOException, InterruptedException {
+        // Import RabbitMQ definitions after the container starts
+        logger.info("Importing RabbitMQ definitions...");
+        RabbitMQContainerFactory.importDefinitions(rabbitMQContainer);
+
+        registry.add("spring.messaging.broker-url",
+                () -> String.format("amqp://%s:%d", rabbitMQContainer.getHost(), rabbitMQContainer.getAmqpPort()));
+        registry.add("spring.messaging.name", () -> "RABBITMQ");
+        registry.add("spring.messaging.user", rabbitMQContainer::getAdminUsername);
+        registry.add("spring.messaging.password", rabbitMQContainer::getAdminPassword);
+    }
+
+    @Override
+    @BeforeEach
+    public void setupAuth() {
+        // Skip truncateTables() for messaging tests - they use different database schema
+        mockSuccessfulCheckResourceAccess();
+        mockSuccessfulCheckObjectAccess();
+        injectAuthentication();
+    }
 
     @Test
-    void testContainerIsRunning() {
-        assert rabbit.isRunning();
+    void containerShouldBeRunning() {
+        assertThat(rabbitMQContainer.isRunning()).isTrue();
+        assertThat(rabbitMQContainer.getAmqpPort()).isGreaterThan(0);
     }
 }

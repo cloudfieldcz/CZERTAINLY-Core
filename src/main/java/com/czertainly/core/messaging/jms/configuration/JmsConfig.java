@@ -15,11 +15,9 @@ import org.springframework.jms.support.converter.MessageType;
 
 @EnableJms
 @Configuration
-@Profile("!test & !toxiproxy-messaging-int-test")
+@Profile("test & !messaging-int-test & !toxiproxy-messaging-int-test")
 @EnableConfigurationProperties({MessagingProperties.class, MessagingConcurrencyProperties.class})
 public class JmsConfig {
-
-    public static final String ROUTING_KEY = "routingKey";
 
     @Bean
     public ConnectionFactory connectionFactory(MessagingProperties props) {
@@ -59,6 +57,7 @@ public class JmsConfig {
                                    MessageConverter messageConverter) {
         JmsTemplate template = new JmsTemplate(connectionFactory);
         template.setMessageConverter(messageConverter);
+        template.setPubSubDomain(true);
         return template;
     }
 }

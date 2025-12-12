@@ -43,6 +43,8 @@ public class RetryConfig {
             template.setRetryPolicy(neverRetryPolicy);
         }
 
+        template.registerListener(new JmsRetryListener());
+
         return template;
     }
 

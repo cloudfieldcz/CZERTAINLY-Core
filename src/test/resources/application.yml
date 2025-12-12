@@ -50,6 +50,9 @@ spring:
     hikari:
       minimum-idle: 5
       maximumPoolSize: 40
+      connection-timeout: 10000
+      idle-timeout: 30000
+      max-lifetime: 60000
     url: jdbc:tc:postgresql:13-alpine://localhost:55432/czertainly-test
     password: test
     username: test
@@ -58,7 +61,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: create
     properties:
       hibernate:
         type:
@@ -87,7 +90,6 @@ spring:
       scheduler: core.scheduler
       validation: core.validation
     exchange: czertainly
-    exchange-prefix: /exchanges/
     routing-key:
       actions: actions
       audit-logs: audit-logs
@@ -116,3 +118,7 @@ otel:
     enabled: false
   sdk:
     disabled: true
+
+settings:
+  cache:
+    refresh-interval: 30
