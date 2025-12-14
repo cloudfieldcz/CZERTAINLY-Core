@@ -5,7 +5,6 @@ import org.apache.qpid.jms.JmsConnectionFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jms.annotation.EnableJms;
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory;
 import org.springframework.jms.core.JmsTemplate;
@@ -15,7 +14,6 @@ import org.springframework.jms.support.converter.MessageType;
 
 @EnableJms
 @Configuration
-@Profile("test & !messaging-int-test & !toxiproxy-messaging-int-test")
 @EnableConfigurationProperties({MessagingProperties.class, MessagingConcurrencyProperties.class})
 public class JmsConfig {
 

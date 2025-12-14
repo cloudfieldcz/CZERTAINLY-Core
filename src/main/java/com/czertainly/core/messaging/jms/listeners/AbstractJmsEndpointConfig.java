@@ -1,5 +1,6 @@
 package com.czertainly.core.messaging.jms.listeners;
 
+import com.czertainly.core.messaging.jms.configuration.JmsRetryListener;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.jms.JMSException;
@@ -73,17 +74,19 @@ public abstract class AbstractJmsEndpointConfig<T> {
         endpoint.setConcurrency(concurrency.get());
         endpoint.setMessageListener(jmsMessage -> {
             jmsRetryTemplate.execute(context -> {
+                context.setAttribute(JmsRetryListener.ENDPOINT_ID_ATTR, endpointId.get());
+
                 try {
                     String json = extractMessageText(jmsMessage, endpointId.get());
                     T message = objectMapper.readValue(json, messageClass);
                     listenerMessageProcessor.processMessage(message);
                 } catch (Exception e) {
-                    logger.error("Failed to process message in endpoint '{}': {}", endpointId.get(), e.getMessage(), e);
                     throw new MessagingException("Message processing failed in endpoint: " + endpointId.get(), e);
                 }
                 return null;
             });
         });
+
         return endpoint;
     }
 

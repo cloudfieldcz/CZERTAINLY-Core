@@ -1,8 +1,6 @@
 package com.czertainly.core;
 
-import com.czertainly.core.messaging.jms.listeners.AuditLogsListener;
 import com.czertainly.core.messaging.jms.listeners.EventListener;
-import com.czertainly.core.messaging.jms.producers.AuditLogsProducer;
 import com.czertainly.core.messaging.jms.producers.EventProducer;
 import com.czertainly.core.service.impl.AuditLogServiceImpl;
 import com.czertainly.core.util.BaseSpringBootTest;
@@ -20,7 +18,6 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.containers.ToxiproxyContainer;
@@ -48,15 +45,11 @@ public abstract class JmsResilienceTests extends BaseSpringBootTest {
 
     protected static Proxy proxy;
 
-    @MockitoSpyBean
-    protected EventListener eventListener;
     @Autowired
     protected EventProducer eventProducer;
 
-    @Autowired
-    protected AuditLogsProducer auditLogsProducer;
-    @Autowired
-    protected AuditLogsListener auditLogsListener;
+    @MockitoSpyBean
+    protected EventListener eventListener;
     @MockitoSpyBean
     protected AuditLogServiceImpl auditLogService;
 
@@ -78,8 +71,6 @@ public abstract class JmsResilienceTests extends BaseSpringBootTest {
 
     @BeforeEach
     void resetProxyToxics() throws IOException {
-        ReflectionTestUtils.setField(auditLogsListener, "auditLogService", auditLogService);
-
         if (proxy != null) {
             proxy.toxics().getAll().forEach(toxic -> {
                 try {

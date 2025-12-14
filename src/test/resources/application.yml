@@ -100,9 +100,9 @@ spring:
     producer:
       retry:
         enabled: true
-        initial-interval: 500
-        max-attempts: 5
-        max-interval: 5000
+        initial-interval: 200
+        max-attempts: 3
+        max-interval: 2000
         multiplier: 2
 messaging:
   concurrency:
