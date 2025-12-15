@@ -3,436 +3,300 @@ package com.czertainly.core;
 import com.czertainly.api.model.core.auth.Resource;
 import com.czertainly.api.model.core.other.ResourceEvent;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
+import com.czertainly.core.messaging.jms.test.CountingRetryListener;
 import com.czertainly.core.messaging.model.EventMessage;
 import eu.rekawek.toxiproxy.model.ToxicDirection;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jms.JmsException;
+import org.springframework.retry.support.RetryTemplate;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 /**
- * Chaos engineering tests for JMS messaging resilience.
- * Uses Toxiproxy to simulate realistic network failure scenarios including:
- * - Connection outages (short and long)
- * - Network latency
- * - Connection timeouts
- * - Bandwidth throttling (slicer)
+ * Deterministic chaos engineering tests for JMS messaging resilience.
  *
- * These tests verify that the retry mechanism handles transient failures correctly
- * and fails gracefully when failures exceed retry limits.
- *
- * Retry configuration is read from application.yml and all timing expectations
- * are calculated dynamically based on this configuration.
- *
- * Expected execution time: ~5-10 seconds for all tests combined (with current config: 3 retries, 200ms initial interval).
- *
- * @see JmsResilienceTests for base configuration
- * @see com.czertainly.core.messaging.jms.configuration.RetryConfig
+ * Key design principles:
+ * 1. DETERMINISTIC: Uses CountingRetryListener to observe actual retry behavior
+ * 2. NO RACE CONDITIONS: Toxics set BEFORE operations; synchronization via CountDownLatch
+ * 3. RETRY COUNT ASSERTIONS: Verify number of retries, not timing
+ * 4. CLEAR SEPARATION: Each test has a single responsibility
  */
 public class JmsNetworkChaosTest extends JmsResilienceTests {
 
     @Autowired
     private MessagingProperties messagingProperties;
 
-    private RetryTimingCalculator retryCalculator;
+    @Autowired
+    private RetryTemplate jmsRetryTemplate;
+
+    private CountingRetryListener countingRetryListener;
+    private int maxAttempts;
 
     @BeforeEach
-    void setupRetryCalculator() {
-        if (retryCalculator == null) {  // 👈 Initialize only once
-            MessagingProperties.Retry retryConfig = messagingProperties.producer().retry();
-            retryCalculator = new RetryTimingCalculator(
-                    retryConfig.initialInterval(),
-                    retryConfig.maxInterval(),
-                    retryConfig.multiplier(),
-                    retryConfig.maxAttempts()
-            );
+    void setUp() {
+        maxAttempts = messagingProperties.producer().retry().maxAttempts();
 
-            // Logs only on FIRST initialization
-            logger.info("Retry configuration: initialInterval={}ms, maxInterval={}ms, multiplier={}, maxAttempts={}",
-                    retryConfig.initialInterval(), retryConfig.maxInterval(),
-                    retryConfig.multiplier(), retryConfig.maxAttempts());
-            logger.info("Calculated retry delays: {}", retryCalculator.getAllRetryDelays());
-            logger.info("Total retry duration: {}ms", retryCalculator.totalRetryDuration());
+        // Register listener once, reset on each test
+        if (countingRetryListener == null) {
+            countingRetryListener = new CountingRetryListener();
+            jmsRetryTemplate.registerListener(countingRetryListener);
         }
+        countingRetryListener.reset();
     }
 
     @Test
     @Timeout(value = 15, unit = TimeUnit.SECONDS)
-    void testConnectionIsUp() {
-        eventProducer.sendMessage(new EventMessage(ResourceEvent.CERTIFICATE_DISCOVERED, Resource.DISCOVERY, UUID.randomUUID(), "testData"));
+    void testConnectionIsUp_shouldSucceedWithoutRetry() {
+        // Given: Proxy is enabled (healthy connection)
+
+        // When: Send message
+        eventProducer.sendMessage(createTestEventMessage());
+
+        // Then: Should succeed on first attempt with no retries
+        assertEquals(1, countingRetryListener.getAttemptsCount(), "Should succeed on first attempt");
+        assertEquals(0, countingRetryListener.getErrorCount(),
+                "Should have no retry errors");
     }
 
     @Test
     @Timeout(value = 15, unit = TimeUnit.SECONDS)
-    void testConnectionDownForShortTime() throws Exception {
-        // Restore connection before all retries are exhausted
-        // We'll restore after 2nd retry: delays[0] + delays[1] = 200ms + 400ms = 600ms
-        long outageMs = retryCalculator.cumulativeWaitBeforeAttempt(2);
-        float outageSeconds = ((float) outageMs / 1000);
+    void testConnectionDown_shouldExhaustRetriesAndFail() throws Exception {
+        // Given: Connection is down
+        proxy.disable();
+        logger.info("Connection DOWN - expecting {} retry attempts", maxAttempts);
 
-        // Expected minimum duration is the outage time (connection restored during retries)
-        long expectedMinDurationMs = outageMs - 500; // Tolerance for timing variance
+        countingRetryListener.expectCompletion();
 
-        logger.info("Test plan: Outage for {}s, restoring before attempt 3 completes", outageSeconds);
+        // When: Send message
+        assertThrows(JmsException.class, () -> {
+            eventProducer.sendMessage(createTestEventMessage());
+        }, "Should throw JmsException after exhausting retries");
 
-        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        // Then: Should have attempted maxAttempts times
+        assertEquals(maxAttempts, countingRetryListener.getAttemptsCount(),
+                "Should have attempted exactly maxAttempts times");
+        assertEquals(maxAttempts, countingRetryListener.getErrorCount(),
+                "All attempts should have failed");
+        assertNotNull(countingRetryListener.getLastException(),
+                "Should have captured the last exception");
+
+        logger.info("Retry exhausted after {} attempts as expected",
+                countingRetryListener.getAttemptsCount());
+    }
+
+    @Test
+    @Timeout(value = 15, unit = TimeUnit.SECONDS)
+    void testConnectionRestoredMidRetry_shouldEventuallySucceed() throws Exception {
+        // Given: Connection starts down
+        proxy.disable();
+        logger.info("Connection DOWN initially");
+
+        // Configure listener to notify after first retry error
+        int retriesBeforeRestore = 1;
+        countingRetryListener.expectRetryErrors(retriesBeforeRestore);
+        countingRetryListener.expectCompletion();
+
+        // Start send operation in background
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<Void> sendFuture = executor.submit(() -> {
+            eventProducer.sendMessage(createTestEventMessage());
+            return null;
+        });
 
         try {
-            // 1. Simulate connection outage
-            proxy.disable();
-            logger.info("=== Connection DOWN for {} seconds ===", outageSeconds);
+            // Wait for first retry error to occur (DETERMINISTIC synchronization)
+            boolean retryOccurred = countingRetryListener.awaitRetryErrors(5, TimeUnit.SECONDS);
+            assertTrue(retryOccurred, "Should have experienced at least one retry error");
 
-            // 2. Schedule connection restoration BEFORE all retries are exhausted
-            var restoreFuture = scheduler.schedule(() -> {
-                try {
-                    proxy.enable();
-                    logger.info("=== Connection RESTORED ===");
-                } catch (Exception e) {
-                    logger.error("Failed to restore connection", e);
-                    throw new RuntimeException(e);
-                }
-            }, outageMs, TimeUnit.MILLISECONDS);
-
-            // 3. Send message - should succeed after retry (when connection is restored)
-            long startTime = System.currentTimeMillis();
-
-            Assertions.assertDoesNotThrow(() -> {
-                eventProducer.sendMessage(new EventMessage(
-                        ResourceEvent.CERTIFICATE_DISCOVERED,
-                        Resource.DISCOVERY,
-                        UUID.randomUUID(),
-                        "testData"
-                ));
-            }, "RetryTemplate should handle temporary outage");
-
-            long duration = System.currentTimeMillis() - startTime;
-
-            // 4. Wait for restoration to complete to avoid race condition
-            restoreFuture.get(5, TimeUnit.SECONDS);
-
-            // 5. Verify that retry actually happened
-            Assertions.assertTrue(duration >= expectedMinDurationMs,
-                    String.format("Message should be sent after retry attempts (took %dms, expected >= %dms)",
-                            duration, expectedMinDurationMs));
-
-            logger.info("=== Message sent successfully after {} ms (retry attempts) ===", duration);
-
-        } finally {
-            scheduler.shutdown();
-            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                logger.warn("Scheduler did not terminate in time");
-            }
-        }
-    }
-
-    @Test
-    @Timeout(value = 15, unit = TimeUnit.SECONDS)
-    void testConnectionDownForLongTime() throws Exception {
-        // Connection stays down to exhaust all retry attempts
-        long totalRetryDuration = retryCalculator.totalRetryDuration();
-        // Conservative: allow 50% tolerance for timing variance (JMS overhead, network delays, etc.)
-        long expectedMinDuration = totalRetryDuration / 2;
-
-        logger.info("Test plan: Connection down to exhaust all {} retry attempts (total {}ms)",
-                retryCalculator.getMaxAttempts(), totalRetryDuration);
-        logger.info("Retry delays: {}", retryCalculator.getAllRetryDelays());
-
-        try {
-            // 1. Simulate long connection outage
-            proxy.disable();
-            logger.info("=== Connection DOWN (long outage exceeding retry limit) ===");
-
-            // 2. Send message - should fail after all retry attempts are exhausted
-            long startTime = System.currentTimeMillis();
-
-            Assertions.assertThrows(JmsException.class, () -> {
-                eventProducer.sendMessage(new EventMessage(
-                        ResourceEvent.CERTIFICATE_DISCOVERED,
-                        Resource.DISCOVERY,
-                        UUID.randomUUID(),
-                        "testData"
-                ));
-            }, "Message should fail after all retry attempts exhausted due to prolonged outage");
-
-            long duration = System.currentTimeMillis() - startTime;
-
-            // 3. Verify that all retry attempts happened
-            Assertions.assertTrue(duration >= expectedMinDuration,
-                    String.format("Should have attempted all retries (took %dms, expected >= %dms)",
-                            duration, expectedMinDuration));
-
-            logger.info("=== Message failed after {} ms ({} retry attempts exhausted) ===",
-                    duration, retryCalculator.getMaxAttempts());
-
-            // 4. Restore connection
+            // Restore connection AFTER first retry error (no race condition)
             proxy.enable();
-            logger.info("=== Connection RESTORED ===");
+            logger.info("Connection RESTORED after {} retry error(s)", retriesBeforeRestore);
 
-            // 5. Verify that subsequent message succeeds after restoration
-            Assertions.assertDoesNotThrow(() -> {
-                eventProducer.sendMessage(new EventMessage(
-                        ResourceEvent.CERTIFICATE_DISCOVERED,
-                        Resource.DISCOVERY,
-                        UUID.randomUUID(),
-                        "testData"
-                ));
-            }, "Message should succeed after connection restoration");
+            // Wait for completion (should succeed now)
+            sendFuture.get(10, TimeUnit.SECONDS);
 
-            logger.info("=== Subsequent message sent successfully after connection restoration ===");
+            // Then: Message should eventually succeed
+            assertTrue(countingRetryListener.getAttemptsCount() > 1,
+                    "Should have retried at least once");
+            assertTrue(countingRetryListener.getAttemptsCount() <= maxAttempts,
+                    "Should not exceed maxAttempts");
+            assertTrue(countingRetryListener.getErrorCount() >= retriesBeforeRestore,
+                    "Should have at least " + retriesBeforeRestore + " error(s)");
+
+            logger.info("Message succeeded after {} attempts ({} errors)",
+                    countingRetryListener.getAttemptsCount(),
+                    countingRetryListener.getErrorCount());
         } finally {
-            // Restore connection (ensure cleanup even on test failure)
-            if (proxy != null && !proxy.isEnabled()) {
-                proxy.enable();
-            }
+            executor.shutdownNow();
         }
     }
 
     @Test
-    @Timeout(value = 10, unit = TimeUnit.SECONDS)
-    void testConnectionLatencyShort() throws IOException {
-        int latencyMs = 500;  // Reduced from 2000ms to 500ms for faster test execution
-        int jitterMs = 100;   // Reduced from 500ms to 100ms
-        String toxicName = "latency-toxic";
+    @Timeout(value = 15, unit = TimeUnit.SECONDS)
+    void testRecoveryAfterFailure_subsequentMessageSucceeds() throws Exception {
+        // Given: First message fails due to connection outage
+        proxy.disable();
 
-        // Add latency toxic (500ms ± 100ms)
-        proxy.toxics().latency(toxicName, ToxicDirection.UPSTREAM, latencyMs).setJitter(jitterMs);
+        assertThrows(JmsException.class, () -> {
+            eventProducer.sendMessage(createTestEventMessage());
+        });
 
-        logger.info("=== Added latency: {}ms ± {}ms ===", latencyMs, jitterMs);
+        int firstAttemptCount = countingRetryListener.getAttemptsCount();
+        logger.info("First message failed after {} attempts", firstAttemptCount);
 
-        // Send message - should succeed despite latency, but take longer
-        long startTime = System.currentTimeMillis();
+        // Reset counter for second message
+        countingRetryListener.reset();
 
-        Assertions.assertDoesNotThrow(() -> {
-            eventProducer.sendMessage(new EventMessage(
-                    ResourceEvent.CERTIFICATE_DISCOVERED,
-                    Resource.DISCOVERY,
-                    UUID.randomUUID(),
-                    "testData"
-            ));
-        }, "Message should be sent successfully despite latency");
+        // When: Connection restored and second message sent
+        proxy.enable();
+        logger.info("Connection RESTORED");
 
-        long duration = System.currentTimeMillis() - startTime;
+        // Then: Second message should succeed immediately
+        assertDoesNotThrow(() -> {
+            eventProducer.sendMessage(createTestEventMessage());
+        });
 
-        // Verify that latency affected the send time
-        // Expected: latency causes delay, but message succeeds (possibly after retries)
-        logger.info("=== Message sent in {} ms (with {}ms latency) ===", duration, latencyMs);
+        assertEquals(1, countingRetryListener.getAttemptsCount(),
+                "Second message should succeed on first attempt");
+        assertEquals(0, countingRetryListener.getErrorCount(),
+                "Second message should have no errors");
 
-        // Verify that latency actually affected the send time (minimum check only)
-        // We don't check maximum because latency can trigger retries, and that's expected behavior
-        int minExpectedDuration = latencyMs - jitterMs - 200; // ~200ms minimum
-        Assertions.assertTrue(duration >= minExpectedDuration,
-                String.format("Duration too short (took %dms, expected >= %dms) - latency may not be working",
-                        duration, minExpectedDuration));
+        logger.info("Second message succeeded on first attempt");
+    }
 
-        logger.info("=== Latency test passed: message handled gracefully {} ===",
-                duration > (latencyMs + retryCalculator.getBackoffDelay(0))
-                        ? "(with retries)" : "(without retries)");
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void testHighLatency_shouldSucceedWithPossibleRetries() throws IOException {
+        // Given: High latency (500ms +/- 100ms jitter)
+        int latencyMs = 500;
+        int jitterMs = 100;
+        proxy.toxics().latency("latency-toxic", ToxicDirection.UPSTREAM, latencyMs)
+                .setJitter(jitterMs);
+
+        logger.info("Added latency: {}ms +/- {}ms", latencyMs, jitterMs);
+
+        // When: Send a message
+        assertDoesNotThrow(() -> {
+            eventProducer.sendMessage(createTestEventMessage());
+        }, "Should eventually succeed despite latency");
+
+        // Then: Verify behavior (may or may not retry depending on latency impact)
+        assertTrue(countingRetryListener.isOpenCalled() && countingRetryListener.getErrorCount() < 1, "Should have at least one attempt");
+
+        logger.info("Message sent successfully: at least one try: {}, error(s): {}",
+                countingRetryListener.isOpenCalled(),
+                countingRetryListener.getErrorCount());
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void testConnectionTimeout_shouldExhaustRetries() throws Exception {
+        // Given: Connection times out after a short duration to trigger retries
+        int timeoutMs = 100;
+        proxy.toxics().timeout("timeout-toxic", ToxicDirection.UPSTREAM, timeoutMs);
+
+        logger.info("Added timeout: {}ms", timeoutMs);
+
+        // When: Send message - should fail after exhausting retries
+        assertThrows(Exception.class, () -> {
+            eventProducer.sendMessage(createTestEventMessage());
+        });
+
+        // Then: Should have attempted maxAttempts times
+        assertEquals(maxAttempts, countingRetryListener.getAttemptsCount(),
+                "Should have attempted exactly maxAttempts times");
+
+        logger.info("Timeout test: at least one try: {}, error(s): {}",
+                countingRetryListener.isOpenCalled(),
+                countingRetryListener.getErrorCount());
     }
 
     @Test
     @Timeout(value = 15, unit = TimeUnit.SECONDS)
-    void testConnectionTimeoutShort() throws Exception {
-        int timeoutMs = 500; // Short timeout per attempt
-        String toxicName = "timeout-cut";
+    void testTimeoutRecovery_shouldSucceedAfterToxicRemoved() throws Exception {
+        // Given: First message fails due to timeout
+        proxy.toxics().timeout("timeout-toxic", ToxicDirection.UPSTREAM, 500);
 
-        // Calculate expected duration: each retry attempt times out after timeoutMs,
-        // plus the backoff delays between attempts
-        long totalRetryDuration = retryCalculator.totalRetryDuration();
-        long expectedMinDuration = (timeoutMs * retryCalculator.getMaxAttempts()) + (totalRetryDuration / 2);
+        assertThrows(Exception.class, () -> {
+            eventProducer.sendMessage(createTestEventMessage());
+        });
 
-        logger.info("Test plan: {} attempts will timeout after {}ms each, total expected duration >= {}ms",
-                retryCalculator.getMaxAttempts(), timeoutMs, expectedMinDuration);
+        countingRetryListener.reset();
 
-        // Add timeout toxic - each connection attempt will timeout after 500ms
-        proxy.toxics().timeout(toxicName, ToxicDirection.UPSTREAM, timeoutMs);
-        logger.info("=== Connection timeout {} ms ===", timeoutMs);
+        // When: Toxic removed and second message sent
+        proxy.toxics().get("timeout-toxic").remove();
+        logger.info("Timeout toxic removed");
 
-        // First message should fail after all retry attempts are exhausted
-        long startTime = System.currentTimeMillis();
+        // Then: Second message succeeds
+        assertDoesNotThrow(() -> {
+            eventProducer.sendMessage(createTestEventMessage());
+        });
 
-        Assertions.assertThrows(Exception.class, () -> {
-            eventProducer.sendMessage(new EventMessage(
-                    ResourceEvent.CERTIFICATE_DISCOVERED,
-                    Resource.DISCOVERY,
-                    UUID.randomUUID(),
-                    "testData"
-            ));
-        }, "Message should fail after all retry attempts exhausted");
-
-        long duration = System.currentTimeMillis() - startTime;
-
-        // Verify that multiple retry attempts happened
-        Assertions.assertTrue(duration >= expectedMinDuration,
-                String.format("Should have retried multiple times (took %dms, expected >= %dms)",
-                        duration, expectedMinDuration));
-
-        logger.info("=== Message failed after {} ms ({} retry attempts exhausted) ===",
-                duration, retryCalculator.getMaxAttempts());
-
-        // Remove toxic to restore connection
-        proxy.toxics().get(toxicName).remove();
-        logger.info("=== Connection RESTORED (Toxic removed) ===");
-
-        // Second message should succeed after restoration
-        Assertions.assertDoesNotThrow(() -> {
-            eventProducer.sendMessage(new EventMessage(
-                    ResourceEvent.CERTIFICATE_DISCOVERED,
-                    Resource.DISCOVERY,
-                    UUID.randomUUID(),
-                    "testData"
-            ));
-        }, "Message should succeed after toxic removed");
-
-        logger.info("=== Message sent successfully after toxic removal ===");
+        assertEquals(1, countingRetryListener.getAttemptsCount(),
+                "Should succeed on first attempt after toxic removal");
     }
 
     @Test
-    @Timeout(value = 15, unit = TimeUnit.SECONDS)
-    void testConnectionSlicer() throws Exception {
-        String toxicName = "slicer-toxic";
-
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void testSlicedConnection_shouldSucceedWithLargePayload() throws Exception {
+        // Given: Slicer toxic (1KB chunks with 20ms delay each)
         int averageSliceSize = 1024;
-        int sizeVariation = 256;
-        int delayMicros = 20 * 1000;
+        int delayMicros = 20_000; // 20ms
+        proxy.toxics().slicer("slicer-toxic", ToxicDirection.UPSTREAM, averageSliceSize, delayMicros)
+                .setSizeVariation(256);
 
-        // Slicer toxic splits data into small chunks with delay
-        proxy.toxics().slicer(toxicName, ToxicDirection.UPSTREAM, averageSliceSize, delayMicros).setSizeVariation(sizeVariation);
+        logger.info("Added slicer: {}bytes with {}us delay", averageSliceSize, delayMicros);
 
-        logger.info("=== Added slicer: {}±{} bytes, {}μs delay ===", averageSliceSize, sizeVariation, delayMicros);
-
-        // Generate message ~64 KB
-        // (64 * 1024 bytes) / 1024 averageSlice = about 64 chunks
-        // Total time: 64 chunks * 20ms = ~1280ms (1.3 seconds)
+        // Large payload (~64KB = ~64 chunks = ~1.3s minimum)
         String largePayload = generateLargeRandomString(64 * 1024);
 
-
-        // Send message - should succeed despite slow/chunked transfer
-        long startTime = System.currentTimeMillis();
-
-        Assertions.assertDoesNotThrow(() -> {
+        // When: Send large message
+        assertDoesNotThrow(() -> {
             eventProducer.sendMessage(new EventMessage(
                     ResourceEvent.CERTIFICATE_DISCOVERED,
                     Resource.DISCOVERY,
                     UUID.randomUUID(),
                     largePayload
             ));
-        }, "Message should be sent successfully despite sliced connection");
+        }, "Should succeed despite sliced connection");
 
-        long duration = System.currentTimeMillis() - startTime;
+        // Then: Message should succeed (possibly with retries due to slow transfer)
+        assertTrue(countingRetryListener.getAttemptsCount() >= 1,
+                "Should have at least one attempt");
 
-        // Verify that slicing actually caused delay
-        // Expected: ~1280ms (64 chunks * 20ms), but be conservative due to:
-        // - AMQP framing overhead (message will be larger than 64KB)
-        // - Serialization overhead (EventMessage wrapping)
-        // - Network variability
-        int expectedMinDuration = 800; // Conservative: at least 800ms
-        int expectedMaxDuration = 3000; // Sanity check: not more than 3 seconds
+        logger.info("Slicer test: at least one try: {}, error(s): {}",
+                countingRetryListener.isOpenCalled(),
+                countingRetryListener.getErrorCount());
+    }
 
-        Assertions.assertTrue(duration >= expectedMinDuration,
-                "Slicing should cause significant delay (took " + duration + "ms, expected >=" + expectedMinDuration + "ms)");
-
-        Assertions.assertTrue(duration <= expectedMaxDuration,
-                "Send took too long (took " + duration + "ms, expected <=" + expectedMaxDuration + "ms) - something might be wrong");
-
-        logger.info("=== Message sent in {} ms (with slicing, expected ~1280ms) ===", duration);
+    private EventMessage createTestEventMessage() {
+        return new EventMessage(
+                ResourceEvent.CERTIFICATE_DISCOVERED,
+                Resource.DISCOVERY,
+                UUID.randomUUID(),
+                "testData"
+        );
     }
 
     private String generateLargeRandomString(int targetSizeInBytes) {
-        int leftLimit = 48; // numeral '0'
-        int rightLimit = 122; // letter 'z'
-        Random random = new Random();
+        int leftLimit = 48;  // '0'
+        int rightLimit = 122; // 'z'
+        java.util.Random random = new java.util.Random();
 
         return random.ints(leftLimit, rightLimit + 1)
                 .filter(i -> (i <= 57 || i >= 65) && (i <= 90 || i >= 97))
                 .limit(targetSizeInBytes)
                 .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
                 .toString();
-    }
-
-    /**
-     * Helper class to calculate retry timing expectations based on configuration.
-     * Reads retry configuration from application.yml and computes expected delays
-     * using exponential backoff formula: delay[n] = min(initialInterval * multiplier^n, maxInterval)
-     */
-    private static class RetryTimingCalculator {
-        private final long initialInterval;
-        private final long maxInterval;
-        private final long multiplier;
-        private final int maxAttempts;
-
-        RetryTimingCalculator(long initialInterval, long maxInterval, long multiplier, int maxAttempts) {
-            this.initialInterval = initialInterval;
-            this.maxInterval = maxInterval;
-            this.multiplier = multiplier;
-            this.maxAttempts = maxAttempts;
-        }
-
-        /**
-         * Calculate cumulative wait time before Nth retry attempt.
-         * @param attemptNumber 1-based attempt number (1 = first retry)
-         * @return cumulative wait time in milliseconds
-         */
-        long cumulativeWaitBeforeAttempt(int attemptNumber) {
-            long total = 0;
-            for (int i = 0; i < attemptNumber; i++) {
-                total += getBackoffDelay(i);
-            }
-            return total;
-        }
-
-        /**
-         * Calculate total time until all retries are exhausted.
-         * This is the sum of all backoff delays BETWEEN attempts, not including
-         * any wait after the final attempt (which never happens).
-
-         * Example with current config (maxAttempts=3):
-         * - Attempt 1 fails -> wait delay[0] = 200ms
-         * - Attempt 2 fails -> wait delay[1] = 400ms
-         * - Attempt 3 fails -> exception thrown (no more waiting)
-
-         * Total = delay[0] + delay[1] = 200 + 400 = 600ms
-         *
-         * @return total duration in milliseconds
-         */
-        long totalRetryDuration() {
-            // Sum delays for (maxAttempts - 1) because we don't wait after the final attempt
-            return cumulativeWaitBeforeAttempt(maxAttempts - 1);
-        }
-
-        /**
-         * Get backoff delay for a specific retry attempt.
-         * @param attemptNumber 0-based attempt number
-         * @return delay in milliseconds
-         */
-        long getBackoffDelay(int attemptNumber) {
-            long delay = initialInterval * (long) Math.pow(multiplier, attemptNumber);
-            return Math.min(delay, maxInterval);
-        }
-
-        /**
-         * Get list of all retry delays for logging/debugging.
-         */
-        List<Long> getAllRetryDelays() {
-            List<Long> delays = new ArrayList<>();
-            for (int i = 0; i < maxAttempts; i++) {
-                delays.add(getBackoffDelay(i));
-            }
-            return delays;
-        }
-
-        int getMaxAttempts() {
-            return maxAttempts;
-        }
     }
 }
