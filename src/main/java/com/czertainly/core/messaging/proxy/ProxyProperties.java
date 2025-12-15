@@ -36,8 +36,39 @@ public record ProxyProperties(
          * Prevents memory issues from too many outstanding requests.
          * Default: 1000
          */
-        Integer maxPendingRequests
+        Integer maxPendingRequests,
+
+        /**
+         * Redis configuration for distributed response coordination.
+         */
+        RedisProperties redis
 ) {
+    /**
+     * Redis configuration for multi-instance proxy response distribution.
+     */
+    public record RedisProperties(
+            /**
+             * Redis pub/sub channel name for distributing proxy responses.
+             * Default: proxy:responses
+             */
+            String channel,
+
+            /**
+             * Whether Redis-based response distribution is enabled.
+             * Default: true
+             */
+            Boolean enabled
+    ) {
+        public RedisProperties {
+            if (channel == null) {
+                channel = "proxy:responses";
+            }
+            if (enabled == null) {
+                enabled = true;
+            }
+        }
+    }
+
     /**
      * Default constructor with default values.
      */
@@ -53,6 +84,9 @@ public record ProxyProperties(
         }
         if (maxPendingRequests == null) {
             maxPendingRequests = 1000;
+        }
+        if (redis == null) {
+            redis = new RedisProperties(null, null);
         }
     }
 
