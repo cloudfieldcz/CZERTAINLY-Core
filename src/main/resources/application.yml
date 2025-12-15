@@ -102,6 +102,11 @@ settings:
     refresh-interval: ${SETTINGS_CACHE_REFRESH_INTERVAL:30}
 
 spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
   datasource:
     driver-class-name: org.postgresql.Driver
     hikari:
@@ -179,6 +184,9 @@ proxy:
   response-subscription: ${PROXY_RESPONSE_SUBSCRIPTION:core}
   request-timeout: ${PROXY_REQUEST_TIMEOUT:30s}
   max-pending-requests: ${PROXY_MAX_PENDING_REQUESTS:1000}
+  redis:
+    channel: ${PROXY_REDIS_CHANNEL:proxy:responses}
+    enabled: ${PROXY_REDIS_ENABLED:true}
 
 validation:
   crl:

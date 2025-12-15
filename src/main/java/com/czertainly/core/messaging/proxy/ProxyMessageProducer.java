@@ -1,7 +1,6 @@
 package com.czertainly.core.messaging.proxy;
 
 import com.czertainly.api.clients.mq.model.ProxyRequest;
-import com.czertainly.core.messaging.jms.configuration.JmsConfig;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jms.core.JmsTemplate;
@@ -51,9 +50,10 @@ public class ProxyMessageProducer {
                     destination,
                     request,
                     message -> {
-                        // Set routing key for message filtering
-                        message.setStringProperty(JmsConfig.ROUTING_KEY, routingKey);
-                        // Set JMS correlation ID for tracing
+                        // Azure-native: JMSType maps to Service Bus Label/Subject
+                        // Use Label for routing - optimal with Correlation Filters
+                        message.setJMSType(routingKey);
+                        // Set JMS correlation ID for request/response matching
                         message.setJMSCorrelationID(request.getCorrelationId());
                         return message;
                     });

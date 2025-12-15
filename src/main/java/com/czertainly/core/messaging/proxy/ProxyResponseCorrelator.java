@@ -112,6 +112,41 @@ public class ProxyResponseCorrelator {
     }
 
     /**
+     * Try to complete a pending request if the correlation ID exists locally.
+     * Used by Redis subscriber and JMS listener to check if this instance owns the request.
+     *
+     * <p>This method is safe to call from any instance - it only completes the request
+     * if this instance has a pending request with the matching correlation ID.</p>
+     *
+     * @param response The response received from the proxy
+     * @return true if a pending request was found and completed, false otherwise
+     */
+    public boolean tryCompleteRequest(ProxyResponse response) {
+        String correlationId = response.getCorrelationId();
+        if (correlationId == null) {
+            log.debug("Cannot try complete request without correlationId");
+            return false;
+        }
+
+        PendingRequest pending = pendingRequests.remove(correlationId);
+        if (pending == null) {
+            // No pending request for this correlation ID - this is expected in multi-instance scenarios
+            return false;
+        }
+
+        // Cancel the timeout task since we got a response
+        pending.timeoutTask().cancel(false);
+
+        // Complete the future with the response
+        pending.future().complete(response);
+
+        long latencyMs = Duration.between(pending.createdAt(), Instant.now()).toMillis();
+        log.debug("Completed request (tryComplete) correlationId={} statusCode={} latency={}ms pendingCount={}",
+                correlationId, response.getStatusCode(), latencyMs, pendingRequests.size());
+        return true;
+    }
+
+    /**
      * Handle timeout for a pending request.
      */
     private void handleTimeout(String correlationId) {
