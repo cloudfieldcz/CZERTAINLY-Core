@@ -87,6 +87,16 @@ public class CountingRetryListener implements RetryListener {
         return retryLatch.await(timeout, unit);
     }
 
+    /**
+     * Block until the operation completes (success or final failure).
+     */
+    public boolean awaitCompletion(long timeout, TimeUnit unit) throws InterruptedException {
+        if (completionLatch == null) {
+            throw new IllegalStateException("Call expectCompletion() before awaiting");
+        }
+        return completionLatch.await(timeout, unit);
+    }
+
     // ========== Assertion Helper Methods ==========
 
     public boolean isOpenCalled() {
