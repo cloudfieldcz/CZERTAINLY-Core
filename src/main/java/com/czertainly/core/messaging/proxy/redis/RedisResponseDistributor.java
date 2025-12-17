@@ -51,6 +51,9 @@ public class RedisResponseDistributor {
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize proxy response for Redis distribution: correlationId={}, error={}",
                     response.getCorrelationId(), e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Failed to publish proxy response to Redis: channel={}, correlationId={}, error={}",
+                    channel, response.getCorrelationId(), e.getMessage(), e);
         }
     }
 }

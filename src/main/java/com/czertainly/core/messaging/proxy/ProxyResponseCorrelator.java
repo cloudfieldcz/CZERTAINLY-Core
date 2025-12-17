@@ -27,6 +27,7 @@ public class ProxyResponseCorrelator {
     private final ConcurrentHashMap<String, PendingRequest> pendingRequests = new ConcurrentHashMap<>();
     private final ScheduledExecutorService timeoutScheduler;
     private final ProxyProperties proxyProperties;
+    private volatile boolean shuttingDown = false;
 
     /**
      * Internal class representing a pending request awaiting response.
@@ -56,6 +57,10 @@ public class ProxyResponseCorrelator {
      * @throws IllegalStateException if too many pending requests
      */
     public CompletableFuture<ProxyResponse> registerRequest(String correlationId, Duration timeout) {
+        if (shuttingDown) {
+            throw new IllegalStateException("ProxyResponseCorrelator is shutting down");
+        }
+
         // Check capacity
         if (pendingRequests.size() >= proxyProperties.maxPendingRequests()) {
             throw new IllegalStateException(
@@ -201,6 +206,7 @@ public class ProxyResponseCorrelator {
      */
     @PreDestroy
     public void shutdown() {
+        shuttingDown = true;
         log.info("Shutting down ProxyResponseCorrelator with {} pending requests", pendingRequests.size());
 
         // Cancel timeout scheduler

@@ -88,7 +88,7 @@ public class ProxyResponseListener implements MessageProcessor<ProxyResponse> {
         } catch (Exception e) {
             log.error("Failed to process proxy response correlationId={}: {}",
                     correlationId, e.getMessage(), e);
-            throw new MessageHandlingException("Failed to process proxy response: " + e.getMessage());
+            throw new MessageHandlingException("Failed to process proxy response: " + e.getMessage(), e);
         }
     }
 }

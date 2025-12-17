@@ -76,7 +76,7 @@ public class ConnectorAuthConverter {
             attributes.put("password", password.getData());
         }
 
-        log.debug("Converted BASIC auth with username: {}", username != null ? username.getData() : "null");
+        log.debug("Converted BASIC auth with username: {}", username != null && username.getData() != null ? "present" : "absent");
 
         return ConnectorAuth.builder()
                 .type("BASIC")

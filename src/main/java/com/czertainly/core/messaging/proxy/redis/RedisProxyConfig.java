@@ -29,6 +29,13 @@ public class RedisProxyConfig {
 
     public RedisProxyConfig(ProxyProperties proxyProperties) {
         this.proxyProperties = proxyProperties;
+
+        if (proxyProperties.redis() == null ||
+            proxyProperties.redis().channel() == null ||
+            proxyProperties.redis().channel().isBlank()) {
+            throw new IllegalArgumentException("Redis channel must be configured when proxy.redis is enabled");
+        }
+
         log.info("Initializing Redis proxy config with channel: {}", proxyProperties.redis().channel());
     }
 
