@@ -96,6 +96,9 @@ public record ProxyProperties(
      * @return Routing key in format "request.{proxyId}"
      */
     public String getRequestRoutingKey(String proxyId) {
+        if (proxyId == null) {
+            throw new IllegalArgumentException("proxyId must not be null");
+        }
         return "request." + proxyId;
     }
 

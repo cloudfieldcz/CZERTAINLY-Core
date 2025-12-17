@@ -42,6 +42,11 @@ public class RedisResponseSubscriber {
             ProxyResponse response = objectMapper.readValue(message, ProxyResponse.class);
             String correlationId = response.getCorrelationId();
 
+            if (correlationId == null) {
+                log.warn("Received proxy response with null correlationId, skipping");
+                return;
+            }
+
             log.debug("Received proxy response from Redis: correlationId={}", correlationId);
 
             // Try to complete local pending request
@@ -55,6 +60,8 @@ public class RedisResponseSubscriber {
 
         } catch (JsonProcessingException e) {
             log.error("Failed to deserialize proxy response from Redis: {}", e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("Unexpected error processing proxy response from Redis: {}", e.getMessage(), e);
         }
     }
 }

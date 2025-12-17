@@ -41,6 +41,12 @@ public class MessageTypeHandlerRegistry {
         for (MessageTypeResponseHandler handler : registeredHandlers) {
             String messageType = handler.getMessageType();
             if (messageType != null && !messageType.isBlank()) {
+                MessageTypeResponseHandler existing = handlers.get(messageType);
+                if (existing != null) {
+                    log.warn("Duplicate messageType '{}' detected: handler {} would overwrite existing handler {}. Keeping first registered handler.",
+                            messageType, handler.getClass().getSimpleName(), existing.getClass().getSimpleName());
+                    continue;
+                }
                 handlers.put(messageType, handler);
                 log.info("Registered messageType handler: {} -> {}", messageType, handler.getClass().getSimpleName());
             } else {
@@ -70,6 +76,10 @@ public class MessageTypeHandlerRegistry {
      * @return true if a handler was found and invoked, false otherwise
      */
     public boolean dispatch(ProxyResponse response) {
+        if (response == null) {
+            log.debug("Cannot dispatch null response");
+            return false;
+        }
         String messageType = response.getMessageType();
         if (messageType == null) {
             log.debug("Cannot dispatch response without messageType");
@@ -102,18 +112,23 @@ public class MessageTypeHandlerRegistry {
     /**
      * Find a handler matching a wildcard pattern.
      * Patterns ending with "/*" match any messageType starting with the prefix.
+     * Uses most-specific-wins strategy: longest matching prefix takes precedence.
      */
     private MessageTypeResponseHandler findPatternMatch(String messageType) {
+        MessageTypeResponseHandler bestMatch = null;
+        int bestPrefixLength = -1;
+
         for (Map.Entry<String, MessageTypeResponseHandler> entry : handlers.entrySet()) {
             String pattern = entry.getKey();
             if (pattern.endsWith("/*")) {
                 String prefix = pattern.substring(0, pattern.length() - 2);
-                if (messageType.startsWith(prefix)) {
-                    return entry.getValue();
+                if (messageType.startsWith(prefix) && prefix.length() > bestPrefixLength) {
+                    bestMatch = entry.getValue();
+                    bestPrefixLength = prefix.length();
                 }
             }
         }
-        return null;
+        return bestMatch;
     }
 
     /**
