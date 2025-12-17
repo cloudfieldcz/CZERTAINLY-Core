@@ -13,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jms.JmsException;
 import org.springframework.retry.support.RetryTemplate;
 
-import java.io.IOException;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Deterministic chaos engineering tests for JMS messaging resilience.
- *
+
  * Key design principles:
  * 1. DETERMINISTIC: Uses CountingRetryListener to observe actual retry behavior
  * 2. NO RACE CONDITIONS: Toxics set BEFORE operations; synchronization via CountDownLatch
@@ -56,16 +55,19 @@ public class JmsNetworkChaosTest extends JmsResilienceTests {
 
     @Test
     @Timeout(value = 15, unit = TimeUnit.SECONDS)
-    void testConnectionIsUp_shouldSucceedWithoutRetry() {
+    void testConnectionIsUp_shouldSucceedWithoutRetry() throws Exception {
         // Given: Proxy is enabled (healthy connection)
+        countingRetryListener.expectCompletion();
 
         // When: Send message
         eventProducer.sendMessage(createTestEventMessage());
 
+        // Wait for completion
+        assertTrue(countingRetryListener.awaitCompletion(5, TimeUnit.SECONDS), "Operation should complete within timeout");
+
         // Then: Should succeed on first attempt with no retries
         assertEquals(1, countingRetryListener.getAttemptsCount(), "Should succeed on first attempt");
-        assertEquals(0, countingRetryListener.getErrorCount(),
-                "Should have no retry errors");
+        assertEquals(0, countingRetryListener.getErrorCount(), "Should have no retry errors");
     }
 
     @Test
@@ -78,20 +80,18 @@ public class JmsNetworkChaosTest extends JmsResilienceTests {
         countingRetryListener.expectCompletion();
 
         // When: Send message
-        assertThrows(JmsException.class, () -> {
-            eventProducer.sendMessage(createTestEventMessage());
-        }, "Should throw JmsException after exhausting retries");
+        assertThrows(JmsException.class, () ->
+            eventProducer.sendMessage(createTestEventMessage()), "Should throw JmsException after exhausting retries");
+
+        // Wait for retry completion
+        assertTrue(countingRetryListener.awaitCompletion(10, TimeUnit.SECONDS), "Retries should complete within timeout");
 
         // Then: Should have attempted maxAttempts times
-        assertEquals(maxAttempts, countingRetryListener.getAttemptsCount(),
-                "Should have attempted exactly maxAttempts times");
-        assertEquals(maxAttempts, countingRetryListener.getErrorCount(),
-                "All attempts should have failed");
-        assertNotNull(countingRetryListener.getLastException(),
-                "Should have captured the last exception");
+        assertEquals(maxAttempts, countingRetryListener.getAttemptsCount(), "Should have attempted exactly maxAttempts times");
+        assertEquals(maxAttempts, countingRetryListener.getErrorCount(), "All attempts should have failed");
+        assertNotNull(countingRetryListener.getLastException(), "Should have captured the last exception");
 
-        logger.info("Retry exhausted after {} attempts as expected",
-                countingRetryListener.getAttemptsCount());
+        logger.info("Retry exhausted after {} attempts as expected", countingRetryListener.getAttemptsCount());
     }
 
     @Test
@@ -126,10 +126,8 @@ public class JmsNetworkChaosTest extends JmsResilienceTests {
             sendFuture.get(10, TimeUnit.SECONDS);
 
             // Then: Message should eventually succeed
-            assertTrue(countingRetryListener.getAttemptsCount() > 1,
-                    "Should have retried at least once");
-            assertTrue(countingRetryListener.getAttemptsCount() <= maxAttempts,
-                    "Should not exceed maxAttempts");
+            assertTrue(countingRetryListener.getAttemptsCount() > 1, "Should have retried at least once");
+            assertTrue(countingRetryListener.getAttemptsCount() <= maxAttempts, "Should not exceed maxAttempts");
             assertTrue(countingRetryListener.getErrorCount() >= retriesBeforeRestore,
                     "Should have at least " + retriesBeforeRestore + " error(s)");
 
@@ -146,10 +144,11 @@ public class JmsNetworkChaosTest extends JmsResilienceTests {
     void testRecoveryAfterFailure_subsequentMessageSucceeds() throws Exception {
         // Given: First message fails due to connection outage
         proxy.disable();
+        countingRetryListener.expectCompletion();
 
-        assertThrows(JmsException.class, () -> {
-            eventProducer.sendMessage(createTestEventMessage());
-        });
+        assertThrows(JmsException.class, () -> eventProducer.sendMessage(createTestEventMessage()));
+
+        assertTrue(countingRetryListener.awaitCompletion(10, TimeUnit.SECONDS), "First message retries should complete");
 
         int firstAttemptCount = countingRetryListener.getAttemptsCount();
         logger.info("First message failed after {} attempts", firstAttemptCount);
@@ -161,40 +160,43 @@ public class JmsNetworkChaosTest extends JmsResilienceTests {
         proxy.enable();
         logger.info("Connection RESTORED");
 
-        // Then: Second message should succeed immediately
-        assertDoesNotThrow(() -> {
-            eventProducer.sendMessage(createTestEventMessage());
-        });
+        countingRetryListener.expectCompletion();
 
-        assertEquals(1, countingRetryListener.getAttemptsCount(),
-                "Second message should succeed on first attempt");
-        assertEquals(0, countingRetryListener.getErrorCount(),
-                "Second message should have no errors");
+        // Then: Second message should succeed immediately
+        assertDoesNotThrow(() -> eventProducer.sendMessage(createTestEventMessage()));
+
+        assertTrue(countingRetryListener.awaitCompletion(5, TimeUnit.SECONDS), "Second message should complete");
+
+        assertEquals(1, countingRetryListener.getAttemptsCount(), "Second message should succeed on first attempt");
+        assertEquals(0, countingRetryListener.getErrorCount(), "Second message should have no errors");
 
         logger.info("Second message succeeded on first attempt");
     }
 
     @Test
     @Timeout(value = 30, unit = TimeUnit.SECONDS)
-    void testHighLatency_shouldSucceedWithPossibleRetries() throws IOException {
+    void testHighLatency_shouldSucceedWithPossibleRetries() throws Exception {
         // Given: High latency (500ms +/- 100ms jitter)
         int latencyMs = 500;
         int jitterMs = 100;
-        proxy.toxics().latency("latency-toxic", ToxicDirection.UPSTREAM, latencyMs)
-                .setJitter(jitterMs);
+        proxy.toxics().latency("latency-toxic", ToxicDirection.UPSTREAM, latencyMs).setJitter(jitterMs);
 
         logger.info("Added latency: {}ms +/- {}ms", latencyMs, jitterMs);
 
+        countingRetryListener.expectCompletion();
+
         // When: Send a message
-        assertDoesNotThrow(() -> {
-            eventProducer.sendMessage(createTestEventMessage());
-        }, "Should eventually succeed despite latency");
+        assertDoesNotThrow(() ->
+            eventProducer.sendMessage(createTestEventMessage()), "Should eventually succeed despite latency");
+
+        // Wait for completion
+        assertTrue(countingRetryListener.awaitCompletion(10, TimeUnit.SECONDS), "Operation should complete within timeout");
 
         // Then: Verify behavior (may or may not retry depending on latency impact)
-        assertTrue(countingRetryListener.isOpenCalled() && countingRetryListener.getErrorCount() < 1, "Should have at least one attempt");
+        assertTrue(countingRetryListener.getAttemptsCount() >= 1, "Should have at least one attempt");
 
-        logger.info("Message sent successfully: at least one try: {}, error(s): {}",
-                countingRetryListener.isOpenCalled(),
+        logger.info("Message sent successfully with {} attempt(s), {} error(s)",
+                countingRetryListener.getAttemptsCount(),
                 countingRetryListener.getErrorCount());
     }
 
@@ -207,17 +209,19 @@ public class JmsNetworkChaosTest extends JmsResilienceTests {
 
         logger.info("Added timeout: {}ms", timeoutMs);
 
+        countingRetryListener.expectCompletion();
+
         // When: Send message - should fail after exhausting retries
-        assertThrows(Exception.class, () -> {
-            eventProducer.sendMessage(createTestEventMessage());
-        });
+        assertThrows(Exception.class, () -> eventProducer.sendMessage(createTestEventMessage()));
+
+        // Wait for retry completion
+        assertTrue(countingRetryListener.awaitCompletion(5, TimeUnit.SECONDS), "Retries should complete within timeout");
 
         // Then: Should have attempted maxAttempts times
-        assertEquals(maxAttempts, countingRetryListener.getAttemptsCount(),
-                "Should have attempted exactly maxAttempts times");
+        assertEquals(maxAttempts, countingRetryListener.getAttemptsCount(), "Should have attempted exactly maxAttempts times");
 
-        logger.info("Timeout test: at least one try: {}, error(s): {}",
-                countingRetryListener.isOpenCalled(),
+        logger.info("Timeout test completed: {} attempt(s), {} error(s)",
+                countingRetryListener.getAttemptsCount(),
                 countingRetryListener.getErrorCount());
     }
 
@@ -226,10 +230,10 @@ public class JmsNetworkChaosTest extends JmsResilienceTests {
     void testTimeoutRecovery_shouldSucceedAfterToxicRemoved() throws Exception {
         // Given: First message fails due to timeout
         proxy.toxics().timeout("timeout-toxic", ToxicDirection.UPSTREAM, 500);
+        countingRetryListener.expectCompletion();
 
-        assertThrows(Exception.class, () -> {
-            eventProducer.sendMessage(createTestEventMessage());
-        });
+        assertThrows(Exception.class, () -> eventProducer.sendMessage(createTestEventMessage()));
+        assertTrue(countingRetryListener.awaitCompletion(10, TimeUnit.SECONDS), "First message retries should complete");
 
         countingRetryListener.reset();
 
@@ -237,10 +241,12 @@ public class JmsNetworkChaosTest extends JmsResilienceTests {
         proxy.toxics().get("timeout-toxic").remove();
         logger.info("Timeout toxic removed");
 
+        countingRetryListener.expectCompletion();
+
         // Then: Second message succeeds
-        assertDoesNotThrow(() -> {
-            eventProducer.sendMessage(createTestEventMessage());
-        });
+        assertDoesNotThrow(() -> eventProducer.sendMessage(createTestEventMessage()));
+
+        assertTrue(countingRetryListener.awaitCompletion(5, TimeUnit.SECONDS), "Second message should complete");
 
         assertEquals(1, countingRetryListener.getAttemptsCount(),
                 "Should succeed on first attempt after toxic removal");
@@ -257,25 +263,29 @@ public class JmsNetworkChaosTest extends JmsResilienceTests {
 
         logger.info("Added slicer: {}bytes with {}us delay", averageSliceSize, delayMicros);
 
+        countingRetryListener.expectCompletion();
+
         // Large payload (~64KB = ~64 chunks = ~1.3s minimum)
         String largePayload = generateLargeRandomString(64 * 1024);
 
         // When: Send large message
-        assertDoesNotThrow(() -> {
+        assertDoesNotThrow(() ->
             eventProducer.sendMessage(new EventMessage(
                     ResourceEvent.CERTIFICATE_DISCOVERED,
                     Resource.DISCOVERY,
                     UUID.randomUUID(),
                     largePayload
-            ));
-        }, "Should succeed despite sliced connection");
+            )),
+            "Should succeed despite sliced connection");
+
+        // Wait for completion
+        assertTrue(countingRetryListener.awaitCompletion(20, TimeUnit.SECONDS), "Operation should complete within timeout");
 
         // Then: Message should succeed (possibly with retries due to slow transfer)
-        assertTrue(countingRetryListener.getAttemptsCount() >= 1,
-                "Should have at least one attempt");
+        assertTrue(countingRetryListener.getAttemptsCount() >= 1, "Should have at least one attempt");
 
-        logger.info("Slicer test: at least one try: {}, error(s): {}",
-                countingRetryListener.isOpenCalled(),
+        logger.info("Slicer test completed: {} attempt(s), {} error(s)",
+                countingRetryListener.getAttemptsCount(),
                 countingRetryListener.getErrorCount());
     }
 
