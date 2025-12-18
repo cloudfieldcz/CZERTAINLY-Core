@@ -29,7 +29,7 @@ public class ProxyMessageProducer {
         this.proxyProperties = proxyProperties;
         this.messagingProperties = messagingProperties;
         this.retryTemplate = retryTemplate;
-        log.info("ProxyMessageProducer initialized with topic: {}", proxyProperties.topic());
+        log.info("ProxyMessageProducer initialized with exchange: {}", proxyProperties.exchange());
     }
 
     /**
@@ -71,14 +71,14 @@ public class ProxyMessageProducer {
      */
     private String getDestination() {
         if (messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS) {
-            return proxyProperties.topic();
+            return proxyProperties.exchange();
         }
 
         // For RabbitMQ, include exchange prefix if configured
         String exchangePrefix = messagingProperties.exchangePrefix();
         if (exchangePrefix != null) {
-            return exchangePrefix + proxyProperties.topic();
+            return exchangePrefix + proxyProperties.exchange();
         }
-        return proxyProperties.topic();
+        return proxyProperties.exchange();
     }
 }

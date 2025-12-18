@@ -24,8 +24,8 @@ public class ProxyResponseJmsEndpointConfig extends AbstractJmsEndpointConfig<Pr
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "proxyResponseListener",
-                proxyProperties::topic,
-                proxyProperties::responseSubscription,
+                proxyProperties::exchange,
+                proxyProperties::responseQueue,
                 () -> "1",
                 ProxyResponse.class
         );
