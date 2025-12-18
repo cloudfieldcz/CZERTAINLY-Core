@@ -1,0 +1,555 @@
+package com.czertainly.core.messaging.proxy;
+
+import com.czertainly.api.clients.mq.model.ConnectorAuth;
+import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.exception.*;
+import com.czertainly.api.model.core.connector.AuthType;
+import com.czertainly.api.model.core.connector.ConnectorDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
+
+/**
+ * Unit tests for {@link ProxyClientImpl}.
+ * Tests request sending, response handling, and error mapping.
+ */
+@ExtendWith(MockitoExtension.class)
+class ProxyClientImplTest {
+
+    @Mock
+    private ProxyMessageProducer producer;
+
+    @Mock
+    private ProxyResponseCorrelator correlator;
+
+    @Mock
+    private ConnectorAuthConverter authConverter;
+
+    private ObjectMapper objectMapper;
+    private ProxyProperties proxyProperties;
+    private ProxyClientImpl proxyClient;
+
+    @BeforeEach
+    void setUp() {
+        objectMapper = new ObjectMapper();
+        proxyProperties = new ProxyProperties(
+                "test-exchange",
+                "test-queue",
+                Duration.ofSeconds(30),
+                1000,
+                null
+        );
+
+        // Default auth converter behavior
+        lenient().when(authConverter.convert(any())).thenReturn(
+                ConnectorAuth.builder().type("NONE").attributes(Map.of()).build()
+        );
+
+        proxyClient = new ProxyClientImpl(producer, correlator, authConverter, objectMapper, proxyProperties);
+    }
+
+    // ==================== Happy Path - Sync Tests ====================
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withSuccessfulResponse_returnsDeserializedBody() throws Exception {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        // Complete the future with a successful response
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(200)
+                .body(Map.of("result", "success"))
+                .timestamp(Instant.now())
+                .build());
+
+        Map<String, Object> result = proxyClient.sendRequest(
+                connector, "/v1/test", "GET", null, Map.class);
+
+        assertThat(result).isNotNull();
+        assertThat(result.get("result")).isEqualTo("success");
+        verify(producer).send(any(), eq("proxy-001"));
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withVoidResponseType_returnsNull() throws Exception {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(204)
+                .timestamp(Instant.now())
+                .build());
+
+        Void result = proxyClient.sendRequest(
+                connector, "/v1/test", "DELETE", null, Void.class);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withNullBody_returnsNull() throws Exception {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(200)
+                .body(null)
+                .timestamp(Instant.now())
+                .build());
+
+        String result = proxyClient.sendRequest(
+                connector, "/v1/test", "GET", null, String.class);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withPathVariables_includesInRequest() throws Exception {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(200)
+                .body("ok")
+                .timestamp(Instant.now())
+                .build());
+
+        Map<String, String> pathVars = Map.of("id", "123", "action", "activate");
+        String result = proxyClient.sendRequest(
+                connector, "/v1/items/{id}/{action}", "POST", pathVars, null, String.class);
+
+        assertThat(result).isNotNull();
+        verify(producer).send(any(), eq("proxy-001"));
+    }
+
+    @Test
+    void sendRequest_usesDefaultTimeout_whenNotSpecified() throws Exception {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), eq(Duration.ofSeconds(30)))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(200)
+                .body("ok")
+                .timestamp(Instant.now())
+                .build());
+
+        proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class);
+
+        verify(correlator).registerRequest(anyString(), eq(Duration.ofSeconds(30)));
+    }
+
+    // ==================== Happy Path - Async Tests ====================
+
+    @Test
+    void sendRequestAsync_registersCorrelationBeforeSend() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        proxyClient.sendRequestAsync(connector, "/v1/test", "GET", null, String.class);
+
+        // Verify registration happens
+        verify(correlator).registerRequest(anyString(), any(Duration.class));
+        // Then send
+        verify(producer).send(any(), eq("proxy-001"));
+    }
+
+    @Test
+    void sendRequestAsync_buildsCorrectProxyRequest() {
+        ConnectorDto connector = createConnector("proxy-001");
+        connector.setUrl("http://connector.example.com");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        proxyClient.sendRequestAsync(connector, "/v1/certificates", "POST", Map.of("name", "test"), String.class);
+
+        ArgumentCaptor<com.czertainly.api.clients.mq.model.ProxyRequest> requestCaptor =
+                ArgumentCaptor.forClass(com.czertainly.api.clients.mq.model.ProxyRequest.class);
+        verify(producer).send(requestCaptor.capture(), eq("proxy-001"));
+
+        var request = requestCaptor.getValue();
+        assertThat(request.getCorrelationId()).isNotNull();
+        assertThat(request.getMessageType()).isEqualTo("POST:/v1/certificates");
+        assertThat(request.getConnectorRequest()).isNotNull();
+        assertThat(request.getConnectorRequest().getConnectorUrl()).isEqualTo("http://connector.example.com");
+        assertThat(request.getConnectorRequest().getMethod()).isEqualTo("POST");
+        assertThat(request.getConnectorRequest().getPath()).isEqualTo("/v1/certificates");
+    }
+
+    // ==================== Error Handling - Proxy Errors ====================
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withValidationError_throwsValidationException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(0)
+                .error("Invalid input data")
+                .errorCategory("validation")
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "POST", null, String.class))
+                .isInstanceOf(ValidationException.class)
+                .hasMessage("Invalid input data");
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withAuthenticationError_throwsConnectorClientException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(0)
+                .error("Invalid credentials")
+                .errorCategory("authentication")
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorClientException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withAuthorizationError_throwsConnectorClientException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(0)
+                .error("Access denied")
+                .errorCategory("authorization")
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorClientException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withNotFoundError_throwsConnectorEntityNotFoundException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(0)
+                .error("Resource not found")
+                .errorCategory("not_found")
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorEntityNotFoundException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withTimeoutError_throwsConnectorCommunicationException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(0)
+                .error("Request timed out")
+                .errorCategory("timeout")
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorCommunicationException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withConnectionError_throwsConnectorCommunicationException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(0)
+                .error("Connection refused")
+                .errorCategory("connection")
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorCommunicationException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withServerError_throwsConnectorServerException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(500)
+                .error("Internal server error")
+                .errorCategory("server_error")
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorServerException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withUnknownErrorCategory_throwsConnectorException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(0)
+                .error("Unknown error occurred")
+                .errorCategory("unknown_category")
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withNullErrorCategory_throwsConnectorException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(0)
+                .error("Some error")
+                .errorCategory(null)
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorException.class);
+    }
+
+    // ==================== Error Handling - HTTP Errors ====================
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withHttp404_throwsConnectorEntityNotFoundException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        // NOTE: Do not set error field - let throwHttpError handle based on status code only
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(404)
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorEntityNotFoundException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withHttp422_throwsValidationException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        // NOTE: Do not set error field - let throwHttpError handle based on status code only
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(422)
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "POST", null, String.class))
+                .isInstanceOf(ValidationException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withHttp4xx_throwsConnectorClientException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        // NOTE: Do not set error field - let throwHttpError handle based on status code only
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(400)
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "POST", null, String.class))
+                .isInstanceOf(ConnectorClientException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withHttp5xx_throwsConnectorServerException() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        // NOTE: Do not set error field - let throwHttpError handle based on status code only
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(503)
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorServerException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_withBlankErrorMessage_usesHttpStatusReasonPhrase() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(500)
+                .error("")
+                .timestamp(Instant.now())
+                .build());
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorServerException.class)
+                .hasMessageContaining("500");
+    }
+
+    // ==================== Exception Propagation ====================
+
+    @Test
+    void sendRequest_withNullProxyId_throwsIllegalArgumentException() {
+        ConnectorDto connector = new ConnectorDto();
+        connector.setProxyId(null);
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void sendRequest_withEmptyProxyId_throwsIllegalArgumentException() {
+        ConnectorDto connector = new ConnectorDto();
+        connector.setProxyId("");
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void sendRequest_withWhitespaceProxyId_throwsIllegalArgumentException() {
+        ConnectorDto connector = new ConnectorDto();
+        connector.setProxyId("   ");
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void sendRequest_onInterruption_throwsConnectorCommunicationExceptionAndSetsInterruptFlag() {
+        ConnectorDto connector = createConnector("proxy-001");
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), any(Duration.class))).thenReturn(future);
+
+        // Interrupt the current thread before making the call
+        Thread.currentThread().interrupt();
+
+        assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
+                .isInstanceOf(ConnectorCommunicationException.class);
+
+        // Verify interrupt flag is restored
+        assertThat(Thread.currentThread().isInterrupted()).isTrue();
+
+        // Clear interrupt flag for other tests
+        Thread.interrupted();
+    }
+
+    // ==================== Custom Timeout ====================
+
+    @Test
+    void sendRequest_withCustomTimeout_usesProvidedTimeout() throws Exception {
+        ConnectorDto connector = createConnector("proxy-001");
+        Duration customTimeout = Duration.ofMinutes(2);
+        CompletableFuture<ProxyResponse> future = new CompletableFuture<>();
+        when(correlator.registerRequest(anyString(), eq(customTimeout))).thenReturn(future);
+
+        future.complete(ProxyResponse.builder()
+                .correlationId("test-corr")
+                .statusCode(200)
+                .body("ok")
+                .timestamp(Instant.now())
+                .build());
+
+        proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class, customTimeout);
+
+        verify(correlator).registerRequest(anyString(), eq(customTimeout));
+    }
+
+    // ==================== Helper Methods ====================
+
+    private ConnectorDto createConnector(String proxyId) {
+        ConnectorDto connector = new ConnectorDto();
+        connector.setProxyId(proxyId);
+        connector.setUrl("http://connector.example.com");
+        connector.setAuthType(AuthType.NONE);
+        return connector;
+    }
+}

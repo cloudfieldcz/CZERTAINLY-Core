@@ -14,16 +14,16 @@ import java.time.Duration;
 @Validated
 public record ProxyProperties(
         /**
-         * Azure Service Bus / RabbitMQ topic name for proxy communication.
+         * Azure Service Bus topic / RabbitMQ exchange name for proxy communication.
          * Default: czertainly-proxy
          */
-        String topic,
+        String exchange,
 
         /**
-         * Subscription name for receiving responses from proxy.
+         * Azure Service Bus subscription / RabbitMQ queue name for receiving responses from proxy.
          * Default: core
          */
-        String responseSubscription,
+        String responseQueue,
 
         /**
          * Default request timeout duration.
@@ -73,11 +73,11 @@ public record ProxyProperties(
      * Default constructor with default values.
      */
     public ProxyProperties {
-        if (topic == null) {
-            topic = "czertainly-proxy";
+        if (exchange == null) {
+            exchange = "czertainly-proxy";
         }
-        if (responseSubscription == null) {
-            responseSubscription = "core";
+        if (responseQueue == null) {
+            responseQueue = "core";
         }
         if (requestTimeout == null) {
             requestTimeout = Duration.ofSeconds(30);
