@@ -1,6 +1,6 @@
 package com.czertainly.core.messaging.proxy.handler;
 
-import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.clients.mq.model.ProxyMessage;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -11,18 +11,25 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Registry for messageType-based response handlers.
- * Dispatches proxy responses to appropriate handlers based on messageType.
+ * Registry for messageType-based message handlers.
+ * Dispatches proxy messages to appropriate handlers based on messageType.
  *
  * <p>This enables fire-and-forget style messaging where any instance can process
- * a response based on its messageType, rather than requiring correlation-based
+ * a message based on its messageType, rather than requiring correlation-based
  * routing back to the originating instance.</p>
  *
- * <p>Pattern matching supports:</p>
+ * <p>Pattern matching follows RabbitMQ topic exchange semantics:</p>
  * <ul>
- *   <li>Exact match: "certificate.issued" matches exactly</li>
- *   <li>Wildcard suffix: "POST:/v1/certificates/*" matches any messageType starting with "POST:/v1/certificates/"</li>
+ *   <li>Segments are separated by '.' (dot)</li>
+ *   <li>Exact match: "health.check" matches exactly "health.check"</li>
+ *   <li>Single-segment wildcard: '*' matches exactly one segment
+ *       (e.g., "GET.v1.certificates.*" matches "GET.v1.certificates.123" but not "GET.v1.certificates" or "GET.v1.certificates.123.details")</li>
+ *   <li>Multi-segment wildcard: '#' matches zero or more segments
+ *       (e.g., "audit.events.#" matches "audit.events", "audit.events.users", "audit.events.users.signup")</li>
+ *   <li>Pattern "#" alone matches everything (fanout behavior)</li>
  * </ul>
+ *
+ * <p>When multiple patterns match, the most specific one wins (literal segments > '*' > '#').</p>
  */
 @Slf4j
 @Component
@@ -70,19 +77,19 @@ public class MessageTypeHandlerRegistry {
     }
 
     /**
-     * Dispatch a response to the appropriate handler based on messageType.
+     * Dispatch a message to the appropriate handler based on messageType.
      *
-     * @param response The proxy response to dispatch
+     * @param message The proxy message to dispatch
      * @return true if a handler was found and invoked, false otherwise
      */
-    public boolean dispatch(ProxyResponse response) {
-        if (response == null) {
-            log.debug("Cannot dispatch null response");
+    public boolean dispatch(ProxyMessage message) {
+        if (message == null) {
+            log.debug("Cannot dispatch null message");
             return false;
         }
-        String messageType = response.getMessageType();
+        String messageType = message.getMessageType();
         if (messageType == null) {
-            log.debug("Cannot dispatch response without messageType");
+            log.debug("Cannot dispatch message without messageType");
             return false;
         }
 
@@ -97,10 +104,10 @@ public class MessageTypeHandlerRegistry {
         if (handler != null) {
             try {
                 log.debug("Dispatching to handler {} for messageType={}", handler.getClass().getSimpleName(), messageType);
-                handler.handleResponse(response);
+                handler.handleResponse(message);
                 return true;
             } catch (Exception e) {
-                log.error("Error handling response messageType={}: {}", messageType, e.getMessage(), e);
+                log.error("Error handling message messageType={}: {}", messageType, e.getMessage(), e);
                 return false;
             }
         }
@@ -110,25 +117,137 @@ public class MessageTypeHandlerRegistry {
     }
 
     /**
-     * Find a handler matching a wildcard pattern.
-     * Patterns ending with "/*" match any messageType starting with the prefix.
-     * Uses most-specific-wins strategy: longest matching prefix takes precedence.
+     * Find a handler matching a pattern using RabbitMQ topic exchange semantics.
+     * Uses most-specific-wins strategy based on pattern specificity score.
+     *
+     * @param messageType The messageType to match
+     * @return The most specific matching handler, or null if none match
      */
     private MessageTypeResponseHandler findPatternMatch(String messageType) {
         MessageTypeResponseHandler bestMatch = null;
-        int bestPrefixLength = -1;
+        int bestScore = -1;
 
         for (Map.Entry<String, MessageTypeResponseHandler> entry : handlers.entrySet()) {
             String pattern = entry.getKey();
-            if (pattern.endsWith("/*")) {
-                String prefix = pattern.substring(0, pattern.length() - 2);
-                if (messageType.startsWith(prefix) && prefix.length() > bestPrefixLength) {
+            if (matches(pattern, messageType)) {
+                int score = calculateSpecificity(pattern);
+                if (score > bestScore) {
+                    bestScore = score;
                     bestMatch = entry.getValue();
-                    bestPrefixLength = prefix.length();
                 }
             }
         }
         return bestMatch;
+    }
+
+    /**
+     * Check if a pattern matches a messageType using RabbitMQ topic exchange semantics.
+     * Segments are separated by '.'; '*' matches exactly one segment; '#' matches zero or more.
+     *
+     * @param pattern The pattern (may contain '*' and '#' wildcards)
+     * @param messageType The messageType to match
+     * @return true if the messageType matches the pattern
+     */
+    private boolean matches(String pattern, String messageType) {
+        if (pattern == null || messageType == null) {
+            return false;
+        }
+        if (pattern.equals(messageType)) {
+            return true;
+        }
+        if (!pattern.contains("*") && !pattern.contains("#")) {
+            return false;
+        }
+
+        String[] patternSegs = pattern.split("\\.", -1);
+        String[] messageSegs = messageType.split("\\.", -1);
+        return matchSegments(patternSegs, 0, messageSegs, 0);
+    }
+
+    /**
+     * Recursively match pattern segments against message segments.
+     *
+     * @param pattern Pattern segments array
+     * @param pi Current pattern index
+     * @param message Message segments array
+     * @param mi Current message index
+     * @return true if remaining segments match
+     */
+    private boolean matchSegments(String[] pattern, int pi, String[] message, int mi) {
+        // Base case: both exhausted - success
+        if (pi == pattern.length && mi == message.length) {
+            return true;
+        }
+
+        // Pattern exhausted but message has more segments - fail
+        if (pi == pattern.length) {
+            return false;
+        }
+
+        String seg = pattern[pi];
+
+        // Handle '#' - matches zero or more segments
+        if ("#".equals(seg)) {
+            // If # is last segment, it matches everything remaining
+            if (pi == pattern.length - 1) {
+                return true;
+            }
+            // Try matching # with 0, 1, 2, ... segments
+            for (int skip = 0; skip <= message.length - mi; skip++) {
+                if (matchSegments(pattern, pi + 1, message, mi + skip)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Message exhausted but pattern has more non-# segments - check if remaining are all #
+        if (mi == message.length) {
+            for (int i = pi; i < pattern.length; i++) {
+                if (!"#".equals(pattern[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Handle '*' - matches exactly one segment
+        if ("*".equals(seg)) {
+            return matchSegments(pattern, pi + 1, message, mi + 1);
+        }
+
+        // Literal match
+        if (seg.equals(message[mi])) {
+            return matchSegments(pattern, pi + 1, message, mi + 1);
+        }
+
+        return false;
+    }
+
+    /**
+     * Calculate specificity score for a pattern.
+     * Higher score = more specific pattern.
+     * Scoring: literal segment = 100, '*' = 10, '#' = 1.
+     *
+     * @param pattern The pattern to score
+     * @return Specificity score (higher = more specific)
+     */
+    private int calculateSpecificity(String pattern) {
+        if (pattern == null || pattern.isEmpty()) {
+            return 0;
+        }
+
+        int score = 0;
+        for (String seg : pattern.split("\\.", -1)) {
+            if ("#".equals(seg)) {
+                score += 1;
+            } else if ("*".equals(seg)) {
+                score += 10;
+            } else {
+                score += 100;
+            }
+        }
+        return score;
     }
 
     /**

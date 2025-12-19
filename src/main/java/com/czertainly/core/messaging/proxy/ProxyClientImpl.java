@@ -2,8 +2,9 @@ package com.czertainly.core.messaging.proxy;
 
 import com.czertainly.api.clients.mq.ProxyClient;
 import com.czertainly.api.clients.mq.model.ConnectorRequest;
-import com.czertainly.api.clients.mq.model.ProxyRequest;
-import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.clients.mq.model.ConnectorResponse;
+import com.czertainly.api.clients.mq.model.CoreMessage;
+import com.czertainly.api.clients.mq.model.ProxyMessage;
 import com.czertainly.api.exception.*;
 import com.czertainly.api.model.core.connector.ConnectorDto;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,15 +32,15 @@ import java.util.concurrent.TimeoutException;
 @Component
 public class ProxyClientImpl implements ProxyClient {
 
-    private final ProxyMessageProducer producer;
-    private final ProxyResponseCorrelator correlator;
+    private final CoreMessageProducer producer;
+    private final ProxyMessageCorrelator correlator;
     private final ConnectorAuthConverter authConverter;
     private final ObjectMapper objectMapper;
     private final ProxyProperties proxyProperties;
 
     public ProxyClientImpl(
-            ProxyMessageProducer producer,
-            ProxyResponseCorrelator correlator,
+            CoreMessageProducer producer,
+            ProxyMessageCorrelator correlator,
             ConnectorAuthConverter authConverter,
             ObjectMapper objectMapper,
             ProxyProperties proxyProperties) {
@@ -163,10 +164,10 @@ public class ProxyClientImpl implements ProxyClient {
         log.debug("Sending async proxy request correlationId={} proxyId={} method={} path={}",
                 correlationId, proxyId, method, path);
 
-        // Build the proxy request
-        ProxyRequest request = ProxyRequest.builder()
+        // Build the core message
+        CoreMessage message = CoreMessage.builder()
                 .correlationId(correlationId)
-                .messageType(method + ":" + path)
+                .messageType(toMessageType(method, path))
                 .timestamp(Instant.now())
                 .connectorRequest(ConnectorRequest.builder()
                         .connectorUrl(connector.getUrl())
@@ -180,19 +181,31 @@ public class ProxyClientImpl implements ProxyClient {
                 .build();
 
         // Register for response BEFORE sending to avoid race condition
-        CompletableFuture<ProxyResponse> responseFuture = correlator.registerRequest(correlationId, timeout);
+        CompletableFuture<ProxyMessage> messageFuture = correlator.registerRequest(correlationId, timeout);
 
         // Send the request
-        producer.send(request, proxyId);
+        producer.send(message, proxyId);
 
         // Transform the response
-        return responseFuture.thenApply(response -> handleResponse(response, responseType, connector));
+        return messageFuture.thenApply(proxyMessage -> handleResponse(proxyMessage, responseType, connector));
     }
 
     /**
-     * Handle proxy response and transform to expected type.
+     * Handle proxy message and transform to expected type.
      */
-    private <T> T handleResponse(ProxyResponse response, Class<T> responseType, ConnectorDto connector) {
+    private <T> T handleResponse(ProxyMessage message, Class<T> responseType, ConnectorDto connector) {
+        ConnectorResponse response = message.getConnectorResponse();
+
+        // Handle health check or missing connector response
+        if (response == null) {
+            if (message.isHealthCheck()) {
+                return null; // Health checks don't have a response body
+            }
+            sneakyThrow(new ConnectorCommunicationException(
+                    "Received proxy message without connector response", connector));
+            return null;
+        }
+
         // Check for proxy-level errors
         if (response.hasError()) {
             throwProxyError(response, connector);
@@ -234,7 +247,7 @@ public class ProxyClientImpl implements ProxyClient {
      * ValidationException is a RuntimeException so it's thrown directly.
      * ConnectorException subtypes are thrown using sneakyThrow for lambda compatibility.
      */
-    private void throwProxyError(ProxyResponse response, ConnectorDto connector) {
+    private void throwProxyError(ConnectorResponse response, ConnectorDto connector) {
         String errorCategory = response.getErrorCategory();
         String errorMessage = response.getError();
 
@@ -271,7 +284,7 @@ public class ProxyClientImpl implements ProxyClient {
      * ValidationException is a RuntimeException so it's thrown directly.
      * ConnectorException subtypes are thrown using sneakyThrow for lambda compatibility.
      */
-    private void throwHttpError(ProxyResponse response, ConnectorDto connector) {
+    private void throwHttpError(ConnectorResponse response, ConnectorDto connector) {
         int statusCode = response.getStatusCode();
         HttpStatus httpStatus = HttpStatus.resolve(statusCode);
 
@@ -306,5 +319,33 @@ public class ProxyClientImpl implements ProxyClient {
             return seconds + "s";
         }
         return timeout.toMillis() + "ms";
+    }
+
+    /**
+     * Convert HTTP method and path to dot-separated messageType format.
+     * This format follows RabbitMQ topic exchange segment conventions.
+     *
+     * <p>Examples:</p>
+     * <ul>
+     *   <li>"GET", "/v1/certificates" → "GET.v1.certificates"</li>
+     *   <li>"POST", "/v1/authorities/123/issue" → "POST.v1.authorities.123.issue"</li>
+     *   <li>"GET", "" → "GET"</li>
+     * </ul>
+     *
+     * @param method HTTP method (GET, POST, etc.)
+     * @param path URL path (with or without leading slash)
+     * @return Dot-separated messageType
+     */
+    private String toMessageType(String method, String path) {
+        if (path == null || path.isEmpty()) {
+            return method;
+        }
+        // Remove leading slash
+        String normalized = path.startsWith("/") ? path.substring(1) : path;
+        if (normalized.isEmpty()) {
+            return method;
+        }
+        // Replace remaining slashes with dots
+        return method + "." + normalized.replace("/", ".");
     }
 }

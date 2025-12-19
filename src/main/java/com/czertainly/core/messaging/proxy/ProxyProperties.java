@@ -93,13 +93,13 @@ public record ProxyProperties(
     /**
      * Get the request routing key/subject for a specific proxy instance.
      * @param proxyId The proxy instance ID
-     * @return Routing key in format "request.{proxyId}"
+     * @return Routing key in format "coremessage.{proxyId}"
      */
     public String getRequestRoutingKey(String proxyId) {
         if (proxyId == null) {
             throw new IllegalArgumentException("proxyId must not be null");
         }
-        return "request." + proxyId;
+        return "coremessage." + proxyId;
     }
 
     /**

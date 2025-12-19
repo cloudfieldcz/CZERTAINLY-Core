@@ -1,6 +1,7 @@
 package com.czertainly.core.messaging.proxy;
 
-import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.clients.mq.model.ConnectorResponse;
+import com.czertainly.api.clients.mq.model.ProxyMessage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,12 +17,12 @@ import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Unit tests for {@link ProxyResponseCorrelator}.
+ * Unit tests for {@link ProxyMessageCorrelator}.
  * Tests request registration, completion, timeout handling, cancellation, and shutdown.
  */
-class ProxyResponseCorrelatorTest {
+class ProxyMessageCorrelatorTest {
 
-    private ProxyResponseCorrelator correlator;
+    private ProxyMessageCorrelator correlator;
     private ProxyProperties proxyProperties;
 
     @BeforeEach
@@ -33,7 +34,7 @@ class ProxyResponseCorrelatorTest {
                 100, // low max pending for testing capacity
                 null
         );
-        correlator = new ProxyResponseCorrelator(proxyProperties);
+        correlator = new ProxyMessageCorrelator(proxyProperties);
     }
 
     @AfterEach
@@ -47,7 +48,7 @@ class ProxyResponseCorrelatorTest {
 
     @Test
     void registerRequest_returnsCompletableFuture() {
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest("corr-1", Duration.ofSeconds(10));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest("corr-1", Duration.ofSeconds(10));
 
         assertThat(future).isNotNull();
         assertThat(future.isDone()).isFalse();
@@ -84,7 +85,7 @@ class ProxyResponseCorrelatorTest {
 
         assertThatThrownBy(() -> correlator.registerRequest("corr-1", Duration.ofSeconds(10)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("ProxyResponseCorrelator is shutting down");
+                .hasMessage("ProxyMessageCorrelator is shutting down");
     }
 
     // ==================== Completion Tests ====================
@@ -93,29 +94,29 @@ class ProxyResponseCorrelatorTest {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     void completeRequest_withMatchingCorrelationId_completesFuture() throws Exception {
         String correlationId = "corr-complete";
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
 
-        ProxyResponse response = createSuccessResponse(correlationId);
-        correlator.completeRequest(response);
+        ProxyMessage message = createSuccessMessage(correlationId);
+        correlator.completeRequest(message);
 
         assertThat(future.isDone()).isTrue();
-        ProxyResponse result = future.get();
+        ProxyMessage result = future.get();
         assertThat(result.getCorrelationId()).isEqualTo(correlationId);
-        assertThat(result.getStatusCode()).isEqualTo(200);
+        assertThat(result.getConnectorResponse().getStatusCode()).isEqualTo(200);
     }
 
     @Test
     void completeRequest_withUnknownCorrelationId_logsWarningAndIgnores() {
-        ProxyResponse response = createSuccessResponse("unknown-corr-id");
+        ProxyMessage message = createSuccessMessage("unknown-corr-id");
 
-        assertThatCode(() -> correlator.completeRequest(response)).doesNotThrowAnyException();
+        assertThatCode(() -> correlator.completeRequest(message)).doesNotThrowAnyException();
     }
 
     @Test
     void completeRequest_withNullCorrelationId_logsWarningAndIgnores() {
-        ProxyResponse response = createSuccessResponse(null);
+        ProxyMessage message = createSuccessMessage(null);
 
-        assertThatCode(() -> correlator.completeRequest(response)).doesNotThrowAnyException();
+        assertThatCode(() -> correlator.completeRequest(message)).doesNotThrowAnyException();
     }
 
     @Test
@@ -124,7 +125,7 @@ class ProxyResponseCorrelatorTest {
         correlator.registerRequest(correlationId, Duration.ofSeconds(30));
         assertThat(correlator.getPendingCount()).isEqualTo(1);
 
-        correlator.completeRequest(createSuccessResponse(correlationId));
+        correlator.completeRequest(createSuccessMessage(correlationId));
         assertThat(correlator.getPendingCount()).isZero();
     }
 
@@ -139,11 +140,11 @@ class ProxyResponseCorrelatorTest {
         assertThat(correlator.getPendingCount()).isEqualTo(100);
 
         // Complete one
-        correlator.completeRequest(createSuccessResponse("corr-50"));
+        correlator.completeRequest(createSuccessMessage("corr-50"));
         assertThat(correlator.getPendingCount()).isEqualTo(99);
 
         // Now we should be able to register one more
-        CompletableFuture<ProxyResponse> newFuture = correlator.registerRequest("corr-new", Duration.ofSeconds(10));
+        CompletableFuture<ProxyMessage> newFuture = correlator.registerRequest("corr-new", Duration.ofSeconds(10));
         assertThat(newFuture).isNotNull();
         assertThat(correlator.getPendingCount()).isEqualTo(100);
     }
@@ -153,9 +154,9 @@ class ProxyResponseCorrelatorTest {
     @Test
     void tryCompleteRequest_withMatchingId_returnsTrueAndCompletes() {
         String correlationId = "corr-try";
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
 
-        boolean completed = correlator.tryCompleteRequest(createSuccessResponse(correlationId));
+        boolean completed = correlator.tryCompleteRequest(createSuccessMessage(correlationId));
 
         assertThat(completed).isTrue();
         assertThat(future.isDone()).isTrue();
@@ -165,7 +166,7 @@ class ProxyResponseCorrelatorTest {
     void tryCompleteRequest_withUnknownId_returnsFalse() {
         correlator.registerRequest("corr-1", Duration.ofSeconds(30));
 
-        boolean completed = correlator.tryCompleteRequest(createSuccessResponse("unknown-id"));
+        boolean completed = correlator.tryCompleteRequest(createSuccessMessage("unknown-id"));
 
         assertThat(completed).isFalse();
     }
@@ -174,7 +175,7 @@ class ProxyResponseCorrelatorTest {
     void tryCompleteRequest_withNullCorrelationId_returnsFalse() {
         correlator.registerRequest("corr-1", Duration.ofSeconds(30));
 
-        boolean completed = correlator.tryCompleteRequest(createSuccessResponse(null));
+        boolean completed = correlator.tryCompleteRequest(createSuccessMessage(null));
 
         assertThat(completed).isFalse();
     }
@@ -184,7 +185,7 @@ class ProxyResponseCorrelatorTest {
         correlator.registerRequest("corr-1", Duration.ofSeconds(30));
         assertThat(correlator.getPendingCount()).isEqualTo(1);
 
-        correlator.tryCompleteRequest(createSuccessResponse("unknown-id"));
+        correlator.tryCompleteRequest(createSuccessMessage("unknown-id"));
         assertThat(correlator.getPendingCount()).isEqualTo(1);
     }
 
@@ -196,18 +197,19 @@ class ProxyResponseCorrelatorTest {
     void registerRequest_afterTimeout_futureCompletesWithTimeoutResponse() throws Exception {
         String correlationId = "corr-timeout";
         // Use a very short timeout
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofMillis(100));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofMillis(100));
 
         // Wait for timeout using Awaitility
         await().atMost(Duration.ofSeconds(2)).until(future::isDone);
 
-        ProxyResponse response = future.get();
-        assertThat(response).isNotNull();
-        assertThat(response.getCorrelationId()).isEqualTo(correlationId);
-        assertThat(response.getStatusCode()).isZero();
-        assertThat(response.getErrorCategory()).isEqualTo("timeout");
-        assertThat(response.isRetryable()).isTrue();
-        assertThat(response.getError()).contains("timed out");
+        ProxyMessage message = future.get();
+        assertThat(message).isNotNull();
+        assertThat(message.getCorrelationId()).isEqualTo(correlationId);
+        assertThat(message.getConnectorResponse()).isNotNull();
+        assertThat(message.getConnectorResponse().getStatusCode()).isZero();
+        assertThat(message.getConnectorResponse().getErrorCategory()).isEqualTo("timeout");
+        assertThat(message.getConnectorResponse().isRetryable()).isTrue();
+        assertThat(message.getConnectorResponse().getError()).contains("timed out");
     }
 
     @Test
@@ -226,20 +228,20 @@ class ProxyResponseCorrelatorTest {
     @DisplayName("Completion before timeout preserves successful response")
     void timeout_doesNotAffectAlreadyCompletedRequest() throws Exception {
         String correlationId = "corr-complete-before-timeout";
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofMillis(200));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofMillis(200));
 
         // Complete immediately
-        ProxyResponse successResponse = createSuccessResponse(correlationId);
-        correlator.completeRequest(successResponse);
+        ProxyMessage successMessage = createSuccessMessage(correlationId);
+        correlator.completeRequest(successMessage);
 
         // Wait past the original timeout using Awaitility
         await().during(Duration.ofMillis(300)).atMost(Duration.ofMillis(500))
                .untilAsserted(() -> assertThat(future.isDone()).isTrue());
 
         // Should still have the success response, not timeout
-        ProxyResponse result = future.get();
-        assertThat(result.getStatusCode()).isEqualTo(200);
-        assertThat(result.getError()).isNull();
+        ProxyMessage result = future.get();
+        assertThat(result.getConnectorResponse().getStatusCode()).isEqualTo(200);
+        assertThat(result.getConnectorResponse().getError()).isNull();
     }
 
     // ==================== Cancellation Tests ====================
@@ -247,7 +249,7 @@ class ProxyResponseCorrelatorTest {
     @Test
     void cancelRequest_withExistingRequest_returnsTrueAndCancels() {
         String correlationId = "corr-cancel";
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
 
         boolean cancelled = correlator.cancelRequest(correlationId);
 
@@ -266,12 +268,12 @@ class ProxyResponseCorrelatorTest {
     @Test
     void cancelRequest_preventsFutureCompletion() {
         String correlationId = "corr-cancel-then-complete";
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
 
         correlator.cancelRequest(correlationId);
 
         // Try to complete after cancellation - should have no effect (already removed)
-        correlator.completeRequest(createSuccessResponse(correlationId));
+        correlator.completeRequest(createSuccessMessage(correlationId));
 
         assertThat(future.isCancelled()).isTrue();
     }
@@ -282,21 +284,21 @@ class ProxyResponseCorrelatorTest {
     @Timeout(value = 10, unit = TimeUnit.SECONDS)
     @DisplayName("Shutdown completes all pending requests with non-retryable connection error")
     void shutdown_completesAllPendingWithShutdownError() throws Exception {
-        CompletableFuture<ProxyResponse> future1 = correlator.registerRequest("corr-1", Duration.ofSeconds(30));
-        CompletableFuture<ProxyResponse> future2 = correlator.registerRequest("corr-2", Duration.ofSeconds(30));
-        CompletableFuture<ProxyResponse> future3 = correlator.registerRequest("corr-3", Duration.ofSeconds(30));
+        CompletableFuture<ProxyMessage> future1 = correlator.registerRequest("corr-1", Duration.ofSeconds(30));
+        CompletableFuture<ProxyMessage> future2 = correlator.registerRequest("corr-2", Duration.ofSeconds(30));
+        CompletableFuture<ProxyMessage> future3 = correlator.registerRequest("corr-3", Duration.ofSeconds(30));
 
         correlator.shutdown();
 
         // All futures should be completed (with longer timeout to allow scheduler shutdown)
-        ProxyResponse response1 = future1.get(5, TimeUnit.SECONDS);
-        ProxyResponse response2 = future2.get(5, TimeUnit.SECONDS);
-        ProxyResponse response3 = future3.get(5, TimeUnit.SECONDS);
+        ProxyMessage message1 = future1.get(5, TimeUnit.SECONDS);
+        ProxyMessage message2 = future2.get(5, TimeUnit.SECONDS);
+        ProxyMessage message3 = future3.get(5, TimeUnit.SECONDS);
 
         // With shutdown error
-        assertThat(response1.getErrorCategory()).isEqualTo("connection");
-        assertThat(response1.getError()).isEqualTo("ProxyClient shutdown");
-        assertThat(response1.isRetryable()).isFalse();
+        assertThat(message1.getConnectorResponse().getErrorCategory()).isEqualTo("connection");
+        assertThat(message1.getConnectorResponse().getError()).isEqualTo("ProxyClient shutdown");
+        assertThat(message1.getConnectorResponse().isRetryable()).isFalse();
     }
 
     @Test
@@ -331,7 +333,7 @@ class ProxyResponseCorrelatorTest {
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch doneLatch = new CountDownLatch(threadCount);
-        List<CompletableFuture<ProxyResponse>> allFutures = new CopyOnWriteArrayList<>();
+        List<CompletableFuture<ProxyMessage>> allFutures = new CopyOnWriteArrayList<>();
 
         // Start threads that will register and complete requests
         for (int t = 0; t < threadCount; t++) {
@@ -341,12 +343,12 @@ class ProxyResponseCorrelatorTest {
                     startLatch.await();
                     for (int i = 0; i < requestsPerThread; i++) {
                         String correlationId = "thread-" + threadId + "-req-" + i;
-                        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
+                        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
                         allFutures.add(future);
 
                         // Complete half of them immediately
                         if (i % 2 == 0) {
-                            correlator.completeRequest(createSuccessResponse(correlationId));
+                            correlator.completeRequest(createSuccessMessage(correlationId));
                         }
                     }
                 } catch (Exception e) {
@@ -376,7 +378,7 @@ class ProxyResponseCorrelatorTest {
     @DisplayName("Multiple threads completing same request - only one succeeds")
     void concurrentCompletionAttempts_onlyOneSucceeds() throws Exception {
         String correlationId = "corr-concurrent";
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofSeconds(30));
 
         int threadCount = 10;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
@@ -388,7 +390,7 @@ class ProxyResponseCorrelatorTest {
             executor.submit(() -> {
                 try {
                     startLatch.await();
-                    correlator.completeRequest(createSuccessResponse(correlationId));
+                    correlator.completeRequest(createSuccessMessage(correlationId));
                 } catch (Exception e) {
                     // Expected for some threads
                 } finally {
@@ -404,17 +406,20 @@ class ProxyResponseCorrelatorTest {
         // Future should be completed exactly once
         assertThat(future.isDone()).isTrue();
         assertThat(future.isCompletedExceptionally()).isFalse();
-        assertThat(future.get().getStatusCode()).isEqualTo(200);
+        assertThat(future.get().getConnectorResponse().getStatusCode()).isEqualTo(200);
         assertThat(correlator.getPendingCount()).isZero();
     }
 
     // ==================== Helper Methods ====================
 
-    private ProxyResponse createSuccessResponse(String correlationId) {
-        return ProxyResponse.builder()
+    private ProxyMessage createSuccessMessage(String correlationId) {
+        return ProxyMessage.builder()
                 .correlationId(correlationId)
-                .statusCode(200)
+                .proxyId("test-proxy")
                 .timestamp(Instant.now())
+                .connectorResponse(ConnectorResponse.builder()
+                        .statusCode(200)
+                        .build())
                 .build();
     }
 }

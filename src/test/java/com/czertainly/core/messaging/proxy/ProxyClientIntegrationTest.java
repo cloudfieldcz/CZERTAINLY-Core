@@ -1,7 +1,8 @@
 package com.czertainly.core.messaging.proxy;
 
-import com.czertainly.api.clients.mq.model.ProxyRequest;
-import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.clients.mq.model.ConnectorResponse;
+import com.czertainly.api.clients.mq.model.CoreMessage;
+import com.czertainly.api.clients.mq.model.ProxyMessage;
 import com.czertainly.api.model.core.connector.AuthType;
 import com.czertainly.api.model.core.connector.ConnectorDto;
 import com.czertainly.core.util.BaseSpringBootTest;
@@ -38,7 +39,7 @@ class ProxyClientIntegrationTest extends BaseSpringBootTest {
     private ProxyClientImpl proxyClient;
 
     @Autowired
-    private ProxyResponseCorrelator correlator;
+    private ProxyMessageCorrelator correlator;
 
     @BeforeEach
     void setUpProxyTest() {
@@ -61,7 +62,7 @@ class ProxyClientIntegrationTest extends BaseSpringBootTest {
         assertThat(correlator.getPendingCount()).isGreaterThanOrEqualTo(1);
 
         // Verify message was sent via JMS
-        verify(jmsTemplate).convertAndSend(any(String.class), any(ProxyRequest.class), any());
+        verify(jmsTemplate).convertAndSend(any(String.class), any(CoreMessage.class), any());
     }
 
     @Test
@@ -71,7 +72,7 @@ class ProxyClientIntegrationTest extends BaseSpringBootTest {
         ConnectorDto connector = createConnector("proxy-int-002");
 
         // Capture the correlation ID when request is sent
-        ArgumentCaptor<ProxyRequest> requestCaptor = ArgumentCaptor.forClass(ProxyRequest.class);
+        ArgumentCaptor<CoreMessage> requestCaptor = ArgumentCaptor.forClass(CoreMessage.class);
 
         // Send async request
         CompletableFuture<Map> future = proxyClient.sendRequestAsync(
@@ -84,14 +85,17 @@ class ProxyClientIntegrationTest extends BaseSpringBootTest {
         String correlationId = requestCaptor.getValue().getCorrelationId();
 
         // Simulate response arriving
-        ProxyResponse response = ProxyResponse.builder()
+        ProxyMessage message = ProxyMessage.builder()
                 .correlationId(correlationId)
-                .statusCode(200)
-                .body(Map.of("status", "ok"))
+                .proxyId("proxy-int-002")
                 .timestamp(Instant.now())
+                .connectorResponse(ConnectorResponse.builder()
+                        .statusCode(200)
+                        .body(Map.of("status", "ok"))
+                        .build())
                 .build();
 
-        correlator.completeRequest(response);
+        correlator.completeRequest(message);
 
         // Verify future completes
         Map result = future.get(2, TimeUnit.SECONDS);
@@ -114,7 +118,7 @@ class ProxyClientIntegrationTest extends BaseSpringBootTest {
                 connector, "/v1/resource/3", "GET", null, String.class);
 
         // Wait for all JMS sends using Awaitility
-        ArgumentCaptor<ProxyRequest> requestCaptor = ArgumentCaptor.forClass(ProxyRequest.class);
+        ArgumentCaptor<CoreMessage> requestCaptor = ArgumentCaptor.forClass(CoreMessage.class);
         await().atMost(Duration.ofSeconds(2))
                .untilAsserted(() -> verify(jmsTemplate, times(3)).convertAndSend(any(String.class), requestCaptor.capture(), any()));
 
@@ -129,12 +133,9 @@ class ProxyClientIntegrationTest extends BaseSpringBootTest {
         assertThat(corrId1).isNotEqualTo(corrId3);
 
         // Complete in different order
-        correlator.completeRequest(ProxyResponse.builder()
-                .correlationId(corrId2).statusCode(200).body("response-2").timestamp(Instant.now()).build());
-        correlator.completeRequest(ProxyResponse.builder()
-                .correlationId(corrId3).statusCode(200).body("response-3").timestamp(Instant.now()).build());
-        correlator.completeRequest(ProxyResponse.builder()
-                .correlationId(corrId1).statusCode(200).body("response-1").timestamp(Instant.now()).build());
+        correlator.completeRequest(createMessage(corrId2, "response-2"));
+        correlator.completeRequest(createMessage(corrId3, "response-3"));
+        correlator.completeRequest(createMessage(corrId1, "response-1"));
 
         // Each future should get correct response
         assertThat(future1.get(2, TimeUnit.SECONDS)).isEqualTo("response-1");
@@ -155,12 +156,7 @@ class ProxyClientIntegrationTest extends BaseSpringBootTest {
                .until(() -> correlator.getPendingCount() >= 1);
 
         // Complete with wrong correlation ID
-        correlator.completeRequest(ProxyResponse.builder()
-                .correlationId("wrong-corr-id")
-                .statusCode(200)
-                .body("wrong response")
-                .timestamp(Instant.now())
-                .build());
+        correlator.completeRequest(createMessage("wrong-corr-id", "wrong response"));
 
         // Original future should still be pending
         assertThat(future.isDone()).isFalse();
@@ -174,5 +170,17 @@ class ProxyClientIntegrationTest extends BaseSpringBootTest {
         connector.setUrl("http://connector.example.com");
         connector.setAuthType(AuthType.NONE);
         return connector;
+    }
+
+    private ProxyMessage createMessage(String correlationId, Object body) {
+        return ProxyMessage.builder()
+                .correlationId(correlationId)
+                .proxyId("test-proxy")
+                .timestamp(Instant.now())
+                .connectorResponse(ConnectorResponse.builder()
+                        .statusCode(200)
+                        .body(body)
+                        .build())
+                .build();
     }
 }

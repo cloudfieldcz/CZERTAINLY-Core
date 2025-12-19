@@ -1,6 +1,6 @@
 package com.czertainly.core.messaging.proxy.redis;
 
-import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.clients.mq.model.ProxyMessage;
 import com.czertainly.core.messaging.proxy.ProxyProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,10 +11,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Publishes proxy responses to Redis pub/sub channel for distribution to other instances.
+ * Publishes proxy messages to Redis pub/sub channel for distribution to other instances.
  *
- * <p>When a Core instance receives a proxy response via JMS but doesn't have a matching
- * pending request (correlation ID not found locally), it publishes the response to Redis.
+ * <p>When a Core instance receives a proxy message via JMS but doesn't have a matching
+ * pending request (correlation ID not found locally), it publishes the message to Redis.
  * Other instances subscribed to the same channel can then complete their pending requests.</p>
  */
 @Slf4j
@@ -38,22 +38,22 @@ public class RedisResponseDistributor {
     }
 
     /**
-     * Publish a proxy response to Redis for distribution to other instances.
+     * Publish a proxy message to Redis for distribution to other instances.
      *
-     * @param response The proxy response to publish
+     * @param message The proxy message to publish
      */
-    public void publishResponse(ProxyResponse response) {
+    public void publishResponse(ProxyMessage message) {
         try {
-            String json = objectMapper.writeValueAsString(response);
+            String json = objectMapper.writeValueAsString(message);
             redisTemplate.convertAndSend(channel, json);
-            log.debug("Published proxy response to Redis channel={} correlationId={}",
-                    channel, response.getCorrelationId());
+            log.debug("Published proxy message to Redis channel={} correlationId={}",
+                    channel, message.getCorrelationId());
         } catch (JsonProcessingException e) {
-            log.error("Failed to serialize proxy response for Redis distribution: correlationId={}, error={}",
-                    response.getCorrelationId(), e.getMessage(), e);
+            log.error("Failed to serialize proxy message for Redis distribution: correlationId={}, error={}",
+                    message.getCorrelationId(), e.getMessage(), e);
         } catch (Exception e) {
-            log.error("Failed to publish proxy response to Redis: channel={}, correlationId={}, error={}",
-                    channel, response.getCorrelationId(), e.getMessage(), e);
+            log.error("Failed to publish proxy message to Redis: channel={}, correlationId={}, error={}",
+                    channel, message.getCorrelationId(), e.getMessage(), e);
         }
     }
 }
