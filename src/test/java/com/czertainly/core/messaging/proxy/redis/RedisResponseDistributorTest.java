@@ -1,6 +1,7 @@
 package com.czertainly.core.messaging.proxy.redis;
 
-import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.clients.mq.model.ConnectorResponse;
+import com.czertainly.api.clients.mq.model.ProxyMessage;
 import com.czertainly.core.messaging.proxy.ProxyProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,7 +23,7 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for {@link RedisResponseDistributor}.
- * Tests publishing proxy responses to Redis pub/sub channel.
+ * Tests publishing proxy messages to Redis pub/sub channel.
  */
 @ExtendWith(MockitoExtension.class)
 class RedisResponseDistributorTest {
@@ -54,49 +55,52 @@ class RedisResponseDistributorTest {
 
     @Test
     void publishResponse_serializesAndPublishesToConfiguredChannel() throws JsonProcessingException {
-        ProxyResponse response = createResponse("corr-1");
-        when(objectMapper.writeValueAsString(response)).thenReturn("{\"correlationId\":\"corr-1\"}");
+        ProxyMessage message = createMessage("corr-1");
+        when(objectMapper.writeValueAsString(message)).thenReturn("{\"correlationId\":\"corr-1\"}");
 
-        distributor.publishResponse(response);
+        distributor.publishResponse(message);
 
-        verify(objectMapper).writeValueAsString(response);
+        verify(objectMapper).writeValueAsString(message);
         verify(redisTemplate).convertAndSend(eq("proxy:test-responses"), eq("{\"correlationId\":\"corr-1\"}"));
     }
 
     @Test
     void publishResponse_onSerializationError_doesNotPublish() throws JsonProcessingException {
-        ProxyResponse response = createResponse("corr-1");
-        when(objectMapper.writeValueAsString(response)).thenThrow(new JsonProcessingException("Serialization failed") {});
+        ProxyMessage message = createMessage("corr-1");
+        when(objectMapper.writeValueAsString(message)).thenThrow(new JsonProcessingException("Serialization failed") {});
 
-        assertThatCode(() -> distributor.publishResponse(response)).doesNotThrowAnyException();
+        assertThatCode(() -> distributor.publishResponse(message)).doesNotThrowAnyException();
 
         verify(redisTemplate, never()).convertAndSend(any(), any());
     }
 
     @Test
     void publishResponse_onRedisConnectionError_handlesGracefully() throws JsonProcessingException {
-        ProxyResponse response = createResponse("corr-1");
-        when(objectMapper.writeValueAsString(response)).thenReturn("{}");
+        ProxyMessage message = createMessage("corr-1");
+        when(objectMapper.writeValueAsString(message)).thenReturn("{}");
         doThrow(new RedisConnectionFailureException("Connection lost")).when(redisTemplate).convertAndSend(any(), any());
 
-        assertThatCode(() -> distributor.publishResponse(response)).doesNotThrowAnyException();
+        assertThatCode(() -> distributor.publishResponse(message)).doesNotThrowAnyException();
     }
 
     @Test
     void publishResponse_withNullCorrelationId_stillPublishes() throws JsonProcessingException {
-        ProxyResponse response = createResponse(null);
-        when(objectMapper.writeValueAsString(response)).thenReturn("{\"correlationId\":null}");
+        ProxyMessage message = createMessage(null);
+        when(objectMapper.writeValueAsString(message)).thenReturn("{\"correlationId\":null}");
 
-        distributor.publishResponse(response);
+        distributor.publishResponse(message);
 
         verify(redisTemplate).convertAndSend(eq("proxy:test-responses"), any(String.class));
     }
 
-    private ProxyResponse createResponse(String correlationId) {
-        return ProxyResponse.builder()
+    private ProxyMessage createMessage(String correlationId) {
+        return ProxyMessage.builder()
                 .correlationId(correlationId)
-                .statusCode(200)
+                .proxyId("test-proxy")
                 .timestamp(Instant.now())
+                .connectorResponse(ConnectorResponse.builder()
+                        .statusCode(200)
+                        .build())
                 .build();
     }
 }

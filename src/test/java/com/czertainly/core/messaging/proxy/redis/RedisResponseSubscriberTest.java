@@ -1,7 +1,8 @@
 package com.czertainly.core.messaging.proxy.redis;
 
-import com.czertainly.api.clients.mq.model.ProxyResponse;
-import com.czertainly.core.messaging.proxy.ProxyResponseCorrelator;
+import com.czertainly.api.clients.mq.model.ConnectorResponse;
+import com.czertainly.api.clients.mq.model.ProxyMessage;
+import com.czertainly.core.messaging.proxy.ProxyMessageCorrelator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,7 +25,7 @@ import static org.mockito.Mockito.*;
 class RedisResponseSubscriberTest {
 
     @Mock
-    private ProxyResponseCorrelator correlator;
+    private ProxyMessageCorrelator correlator;
 
     @Mock
     private ObjectMapper objectMapper;
@@ -38,32 +39,32 @@ class RedisResponseSubscriberTest {
 
     @Test
     void onMessage_deserializesAndTriesToCompleteLocally() throws Exception {
-        String jsonMessage = "{\"correlationId\":\"corr-1\",\"statusCode\":200}";
-        ProxyResponse response = createResponse("corr-1");
-        when(objectMapper.readValue(jsonMessage, ProxyResponse.class)).thenReturn(response);
-        when(correlator.tryCompleteRequest(response)).thenReturn(true);
+        String jsonMessage = "{\"correlationId\":\"corr-1\",\"proxyId\":\"test-proxy\"}";
+        ProxyMessage message = createMessage("corr-1");
+        when(objectMapper.readValue(jsonMessage, ProxyMessage.class)).thenReturn(message);
+        when(correlator.tryCompleteRequest(message)).thenReturn(true);
 
         subscriber.onMessage(jsonMessage);
 
-        verify(objectMapper).readValue(jsonMessage, ProxyResponse.class);
-        verify(correlator).tryCompleteRequest(response);
+        verify(objectMapper).readValue(jsonMessage, ProxyMessage.class);
+        verify(correlator).tryCompleteRequest(message);
     }
 
     @Test
     void onMessage_whenNotFoundLocally_ignoresQuietly() throws Exception {
         String jsonMessage = "{\"correlationId\":\"corr-other-instance\"}";
-        ProxyResponse response = createResponse("corr-other-instance");
-        when(objectMapper.readValue(jsonMessage, ProxyResponse.class)).thenReturn(response);
-        when(correlator.tryCompleteRequest(response)).thenReturn(false);
+        ProxyMessage message = createMessage("corr-other-instance");
+        when(objectMapper.readValue(jsonMessage, ProxyMessage.class)).thenReturn(message);
+        when(correlator.tryCompleteRequest(message)).thenReturn(false);
 
         assertThatCode(() -> subscriber.onMessage(jsonMessage)).doesNotThrowAnyException();
-        verify(correlator).tryCompleteRequest(response);
+        verify(correlator).tryCompleteRequest(message);
     }
 
     @Test
     void onMessage_onDeserializationError_doesNotCallCorrelator() throws Exception {
         String invalidJson = "invalid json";
-        when(objectMapper.readValue(invalidJson, ProxyResponse.class))
+        when(objectMapper.readValue(invalidJson, ProxyMessage.class))
                 .thenThrow(new JsonProcessingException("Parse error") {});
 
         assertThatCode(() -> subscriber.onMessage(invalidJson)).doesNotThrowAnyException();
@@ -73,9 +74,9 @@ class RedisResponseSubscriberTest {
 
     @Test
     void onMessage_withNullCorrelationId_skipsCorrelator() throws Exception {
-        String jsonMessage = "{\"correlationId\":null,\"statusCode\":200}";
-        ProxyResponse response = createResponse(null);
-        when(objectMapper.readValue(jsonMessage, ProxyResponse.class)).thenReturn(response);
+        String jsonMessage = "{\"correlationId\":null,\"proxyId\":\"test-proxy\"}";
+        ProxyMessage message = createMessage(null);
+        when(objectMapper.readValue(jsonMessage, ProxyMessage.class)).thenReturn(message);
 
         subscriber.onMessage(jsonMessage);
 
@@ -85,18 +86,21 @@ class RedisResponseSubscriberTest {
     @Test
     void onMessage_onCorrelatorException_handlesGracefully() throws Exception {
         String jsonMessage = "{\"correlationId\":\"corr-error\"}";
-        ProxyResponse response = createResponse("corr-error");
-        when(objectMapper.readValue(jsonMessage, ProxyResponse.class)).thenReturn(response);
-        when(correlator.tryCompleteRequest(response)).thenThrow(new IllegalStateException("Correlator error"));
+        ProxyMessage message = createMessage("corr-error");
+        when(objectMapper.readValue(jsonMessage, ProxyMessage.class)).thenReturn(message);
+        when(correlator.tryCompleteRequest(message)).thenThrow(new IllegalStateException("Correlator error"));
 
         assertThatCode(() -> subscriber.onMessage(jsonMessage)).doesNotThrowAnyException();
     }
 
-    private ProxyResponse createResponse(String correlationId) {
-        return ProxyResponse.builder()
+    private ProxyMessage createMessage(String correlationId) {
+        return ProxyMessage.builder()
                 .correlationId(correlationId)
-                .statusCode(200)
+                .proxyId("test-proxy")
                 .timestamp(Instant.now())
+                .connectorResponse(ConnectorResponse.builder()
+                        .statusCode(200)
+                        .build())
                 .build();
     }
 }

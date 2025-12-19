@@ -1,6 +1,6 @@
 package com.czertainly.core.messaging.proxy;
 
-import com.czertainly.api.clients.mq.model.ProxyRequest;
+import com.czertainly.api.clients.mq.model.CoreMessage;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jms.core.JmsTemplate;
@@ -8,19 +8,19 @@ import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Produces proxy request messages to the message queue.
+ * Produces core messages to the message queue for proxy consumption.
  * Sends requests to the appropriate proxy instance based on proxyId.
  */
 @Slf4j
 @Component
-public class ProxyMessageProducer {
+public class CoreMessageProducer {
 
     private final JmsTemplate jmsTemplate;
     private final ProxyProperties proxyProperties;
     private final MessagingProperties messagingProperties;
     private final RetryTemplate retryTemplate;
 
-    public ProxyMessageProducer(
+    public CoreMessageProducer(
             JmsTemplate jmsTemplate,
             ProxyProperties proxyProperties,
             MessagingProperties messagingProperties,
@@ -29,37 +29,37 @@ public class ProxyMessageProducer {
         this.proxyProperties = proxyProperties;
         this.messagingProperties = messagingProperties;
         this.retryTemplate = retryTemplate;
-        log.info("ProxyMessageProducer initialized with exchange: {}", proxyProperties.exchange());
+        log.info("CoreMessageProducer initialized with exchange: {}", proxyProperties.exchange());
     }
 
     /**
-     * Send a proxy request to the specified proxy instance.
+     * Send a core message to the specified proxy instance.
      *
-     * @param request The proxy request to send
+     * @param message The core message to send
      * @param proxyId The target proxy instance ID
      */
-    public void send(ProxyRequest request, String proxyId) {
+    public void send(CoreMessage message, String proxyId) {
         String routingKey = proxyProperties.getRequestRoutingKey(proxyId);
         String destination = getDestination();
 
-        log.debug("Sending proxy request correlationId={} proxyId={} destination={} routingKey={}",
-                request.getCorrelationId(), proxyId, destination, routingKey);
+        log.debug("Sending core message correlationId={} proxyId={} destination={} routingKey={}",
+                message.getCorrelationId(), proxyId, destination, routingKey);
 
         retryTemplate.execute(context -> {
             jmsTemplate.convertAndSend(
                     destination,
-                    request,
-                    message -> {
+                    message,
+                    msg -> {
                         // Azure-native: JMSType maps to Service Bus Label/Subject
                         // Use Label for routing - optimal with Correlation Filters
-                        message.setJMSType(routingKey);
+                        msg.setJMSType(routingKey);
                         // Set JMS correlation ID for request/response matching
-                        message.setJMSCorrelationID(request.getCorrelationId());
-                        return message;
+                        msg.setJMSCorrelationID(message.getCorrelationId());
+                        return msg;
                     });
 
-            log.debug("Sent proxy request correlationId={} routingKey={}",
-                    request.getCorrelationId(), routingKey);
+            log.debug("Sent core message correlationId={} routingKey={}",
+                    message.getCorrelationId(), routingKey);
             return null;
         });
     }

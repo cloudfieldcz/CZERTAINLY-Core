@@ -1,6 +1,7 @@
 package com.czertainly.core.messaging.proxy;
 
-import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.clients.mq.model.ConnectorResponse;
+import com.czertainly.api.clients.mq.model.ProxyMessage;
 import com.czertainly.api.exception.MessageHandlingException;
 import com.czertainly.core.messaging.proxy.handler.MessageTypeHandlerRegistry;
 import com.czertainly.core.messaging.proxy.redis.RedisResponseDistributor;
@@ -17,14 +18,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for {@link ProxyResponseListener}.
+ * Unit tests for {@link ProxyMessageListener}.
  * Tests the three-tier response routing: handler → correlator → Redis distribution.
  */
 @ExtendWith(MockitoExtension.class)
-class ProxyResponseListenerTest {
+class ProxyMessageListenerTest {
 
     @Mock
-    private ProxyResponseCorrelator correlator;
+    private ProxyMessageCorrelator correlator;
 
     @Mock
     private MessageTypeHandlerRegistry handlerRegistry;
@@ -32,17 +33,17 @@ class ProxyResponseListenerTest {
     @Mock
     private RedisResponseDistributor redisDistributor;
 
-    private ProxyResponseListener listener;
+    private ProxyMessageListener listener;
 
     @BeforeEach
     void setUp() {
-        listener = new ProxyResponseListener(correlator, handlerRegistry, redisDistributor);
+        listener = new ProxyMessageListener(correlator, handlerRegistry, redisDistributor);
     }
 
     // ==================== Null Handling Tests ====================
 
     @Test
-    void processMessage_withNullResponse_logsWarningAndReturns() {
+    void processMessage_withNullMessage_logsWarningAndReturns() {
         // Should not throw
         assertThatCode(() -> listener.processMessage(null)).doesNotThrowAnyException();
 
@@ -55,23 +56,23 @@ class ProxyResponseListenerTest {
 
     @Test
     void processMessage_withRegisteredHandler_dispatchesToHandler() throws MessageHandlingException {
-        ProxyResponse response = createResponse("corr-1", "certificate.issued");
+        ProxyMessage message = createMessage("corr-1", "certificate.issued");
         when(handlerRegistry.hasHandler("certificate.issued")).thenReturn(true);
-        when(handlerRegistry.dispatch(response)).thenReturn(true);
+        when(handlerRegistry.dispatch(message)).thenReturn(true);
 
-        listener.processMessage(response);
+        listener.processMessage(message);
 
         verify(handlerRegistry).hasHandler("certificate.issued");
-        verify(handlerRegistry).dispatch(response);
+        verify(handlerRegistry).dispatch(message);
     }
 
     @Test
     void processMessage_withRegisteredHandler_doesNotCallCorrelator() throws MessageHandlingException {
-        ProxyResponse response = createResponse("corr-1", "certificate.issued");
+        ProxyMessage message = createMessage("corr-1", "certificate.issued");
         when(handlerRegistry.hasHandler("certificate.issued")).thenReturn(true);
-        when(handlerRegistry.dispatch(response)).thenReturn(true);
+        when(handlerRegistry.dispatch(message)).thenReturn(true);
 
-        listener.processMessage(response);
+        listener.processMessage(message);
 
         verify(correlator, never()).tryCompleteRequest(any());
         verify(redisDistributor, never()).publishResponse(any());
@@ -79,59 +80,59 @@ class ProxyResponseListenerTest {
 
     @Test
     void processMessage_handlerNotFound_fallsToCorrelator() throws MessageHandlingException {
-        ProxyResponse response = createResponse("corr-1", "unknown.type");
+        ProxyMessage message = createMessage("corr-1", "unknown.type");
         when(handlerRegistry.hasHandler("unknown.type")).thenReturn(false);
-        when(correlator.tryCompleteRequest(response)).thenReturn(true);
+        when(correlator.tryCompleteRequest(message)).thenReturn(true);
 
-        listener.processMessage(response);
+        listener.processMessage(message);
 
-        verify(correlator).tryCompleteRequest(response);
+        verify(correlator).tryCompleteRequest(message);
     }
 
     @Test
     void processMessage_withNullHandlerRegistry_skipsHandlerCheck() throws MessageHandlingException {
-        listener = new ProxyResponseListener(correlator, null, redisDistributor);
-        ProxyResponse response = createResponse("corr-1", "some.type");
-        when(correlator.tryCompleteRequest(response)).thenReturn(true);
+        listener = new ProxyMessageListener(correlator, null, redisDistributor);
+        ProxyMessage message = createMessage("corr-1", "some.type");
+        when(correlator.tryCompleteRequest(message)).thenReturn(true);
 
-        listener.processMessage(response);
+        listener.processMessage(message);
 
-        verify(correlator).tryCompleteRequest(response);
+        verify(correlator).tryCompleteRequest(message);
     }
 
     @Test
     void processMessage_withNullMessageType_skipsHandlerCheck() throws MessageHandlingException {
-        ProxyResponse response = createResponse("corr-1", null);
-        when(correlator.tryCompleteRequest(response)).thenReturn(true);
+        ProxyMessage message = createMessage("corr-1", null);
+        when(correlator.tryCompleteRequest(message)).thenReturn(true);
 
-        listener.processMessage(response);
+        listener.processMessage(message);
 
         // Handler check should be skipped when messageType is null
         verify(handlerRegistry, never()).hasHandler(any());
-        verify(correlator).tryCompleteRequest(response);
+        verify(correlator).tryCompleteRequest(message);
     }
 
     // ==================== Correlator-Based Routing (Tier 2) Tests ====================
 
     @Test
     void processMessage_withLocalCorrelation_completesLocally() throws MessageHandlingException {
-        ProxyResponse response = createResponse("corr-local", "GET:/v1/test");
+        ProxyMessage message = createMessage("corr-local", "GET:/v1/test");
         when(handlerRegistry.hasHandler("GET:/v1/test")).thenReturn(false);
-        when(correlator.tryCompleteRequest(response)).thenReturn(true);
+        when(correlator.tryCompleteRequest(message)).thenReturn(true);
 
-        listener.processMessage(response);
+        listener.processMessage(message);
 
-        verify(correlator).tryCompleteRequest(response);
+        verify(correlator).tryCompleteRequest(message);
         verify(redisDistributor, never()).publishResponse(any());
     }
 
     @Test
     void processMessage_locallyHandled_doesNotDistributeViaRedis() throws MessageHandlingException {
-        ProxyResponse response = createResponse("corr-local", "POST:/v1/data");
+        ProxyMessage message = createMessage("corr-local", "POST:/v1/data");
         when(handlerRegistry.hasHandler("POST:/v1/data")).thenReturn(false);
-        when(correlator.tryCompleteRequest(response)).thenReturn(true);
+        when(correlator.tryCompleteRequest(message)).thenReturn(true);
 
-        listener.processMessage(response);
+        listener.processMessage(message);
 
         verify(redisDistributor, never()).publishResponse(any());
     }
@@ -140,33 +141,33 @@ class ProxyResponseListenerTest {
 
     @Test
     void processMessage_notFoundLocally_distributesViaRedis() throws MessageHandlingException {
-        ProxyResponse response = createResponse("corr-remote", "GET:/v1/resource");
+        ProxyMessage message = createMessage("corr-remote", "GET:/v1/resource");
         when(handlerRegistry.hasHandler("GET:/v1/resource")).thenReturn(false);
-        when(correlator.tryCompleteRequest(response)).thenReturn(false);
+        when(correlator.tryCompleteRequest(message)).thenReturn(false);
 
-        listener.processMessage(response);
+        listener.processMessage(message);
 
-        verify(redisDistributor).publishResponse(response);
+        verify(redisDistributor).publishResponse(message);
     }
 
     @Test
     void processMessage_noRedisDistributor_logsWarning() throws MessageHandlingException {
-        listener = new ProxyResponseListener(correlator, handlerRegistry, null);
-        ProxyResponse response = createResponse("corr-remote", "GET:/v1/resource");
+        listener = new ProxyMessageListener(correlator, handlerRegistry, null);
+        ProxyMessage message = createMessage("corr-remote", "GET:/v1/resource");
         when(handlerRegistry.hasHandler("GET:/v1/resource")).thenReturn(false);
-        when(correlator.tryCompleteRequest(response)).thenReturn(false);
+        when(correlator.tryCompleteRequest(message)).thenReturn(false);
 
         // Should not throw, just log warning
-        assertThatCode(() -> listener.processMessage(response)).doesNotThrowAnyException();
+        assertThatCode(() -> listener.processMessage(message)).doesNotThrowAnyException();
     }
 
     @Test
     void processMessage_withNullCorrelationId_logsWarningAndReturns() throws MessageHandlingException {
-        ProxyResponse response = createResponse(null, "GET:/v1/test");
+        ProxyMessage message = createMessage(null, "GET:/v1/test");
         when(handlerRegistry.hasHandler("GET:/v1/test")).thenReturn(false);
 
         // Should not throw, just log warning
-        assertThatCode(() -> listener.processMessage(response)).doesNotThrowAnyException();
+        assertThatCode(() -> listener.processMessage(message)).doesNotThrowAnyException();
 
         verify(correlator, never()).tryCompleteRequest(any());
         verify(redisDistributor, never()).publishResponse(any());
@@ -174,11 +175,11 @@ class ProxyResponseListenerTest {
 
     @Test
     void processMessage_withBlankCorrelationId_logsWarningAndReturns() throws MessageHandlingException {
-        ProxyResponse response = createResponse("   ", "GET:/v1/test");
+        ProxyMessage message = createMessage("   ", "GET:/v1/test");
         when(handlerRegistry.hasHandler("GET:/v1/test")).thenReturn(false);
 
         // Should not throw, just log warning
-        assertThatCode(() -> listener.processMessage(response)).doesNotThrowAnyException();
+        assertThatCode(() -> listener.processMessage(message)).doesNotThrowAnyException();
 
         verify(correlator, never()).tryCompleteRequest(any());
         verify(redisDistributor, never()).publishResponse(any());
@@ -188,46 +189,49 @@ class ProxyResponseListenerTest {
 
     @Test
     void processMessage_onHandlerException_throwsMessageHandlingException() {
-        ProxyResponse response = createResponse("corr-1", "error.type");
+        ProxyMessage message = createMessage("corr-1", "error.type");
         when(handlerRegistry.hasHandler("error.type")).thenReturn(true);
-        when(handlerRegistry.dispatch(response)).thenThrow(new RuntimeException("Handler failed"));
+        when(handlerRegistry.dispatch(message)).thenThrow(new RuntimeException("Handler failed"));
 
-        assertThatThrownBy(() -> listener.processMessage(response))
+        assertThatThrownBy(() -> listener.processMessage(message))
                 .isInstanceOf(MessageHandlingException.class)
-                .hasMessageContaining("Failed to process proxy response");
+                .hasMessageContaining("Failed to process proxy message");
     }
 
     @Test
     void processMessage_onCorrelatorException_throwsMessageHandlingException() {
-        ProxyResponse response = createResponse("corr-1", "test.type");
+        ProxyMessage message = createMessage("corr-1", "test.type");
         when(handlerRegistry.hasHandler("test.type")).thenReturn(false);
-        when(correlator.tryCompleteRequest(response)).thenThrow(new RuntimeException("Correlator failed"));
+        when(correlator.tryCompleteRequest(message)).thenThrow(new RuntimeException("Correlator failed"));
 
-        assertThatThrownBy(() -> listener.processMessage(response))
+        assertThatThrownBy(() -> listener.processMessage(message))
                 .isInstanceOf(MessageHandlingException.class)
-                .hasMessageContaining("Failed to process proxy response");
+                .hasMessageContaining("Failed to process proxy message");
     }
 
     @Test
     void processMessage_onRedisException_throwsMessageHandlingException() {
-        ProxyResponse response = createResponse("corr-1", "test.type");
+        ProxyMessage message = createMessage("corr-1", "test.type");
         when(handlerRegistry.hasHandler("test.type")).thenReturn(false);
-        when(correlator.tryCompleteRequest(response)).thenReturn(false);
-        doThrow(new RuntimeException("Redis failed")).when(redisDistributor).publishResponse(response);
+        when(correlator.tryCompleteRequest(message)).thenReturn(false);
+        doThrow(new RuntimeException("Redis failed")).when(redisDistributor).publishResponse(message);
 
-        assertThatThrownBy(() -> listener.processMessage(response))
+        assertThatThrownBy(() -> listener.processMessage(message))
                 .isInstanceOf(MessageHandlingException.class)
-                .hasMessageContaining("Failed to process proxy response");
+                .hasMessageContaining("Failed to process proxy message");
     }
 
     // ==================== Helper Methods ====================
 
-    private ProxyResponse createResponse(String correlationId, String messageType) {
-        return ProxyResponse.builder()
+    private ProxyMessage createMessage(String correlationId, String messageType) {
+        return ProxyMessage.builder()
                 .correlationId(correlationId)
+                .proxyId("test-proxy")
                 .messageType(messageType)
-                .statusCode(200)
                 .timestamp(Instant.now())
+                .connectorResponse(ConnectorResponse.builder()
+                        .statusCode(200)
+                        .build())
                 .build();
     }
 }

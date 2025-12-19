@@ -1,6 +1,7 @@
 package com.czertainly.core.messaging.proxy.handler;
 
-import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.clients.mq.model.ConnectorResponse;
+import com.czertainly.api.clients.mq.model.ProxyMessage;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -12,7 +13,14 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for {@link MessageTypeHandlerRegistry}.
- * Tests handler registration, exact/wildcard pattern matching, and dispatch logic.
+ * Tests handler registration, exact match, and RabbitMQ topic exchange pattern matching.
+ *
+ * <p>Pattern matching follows RabbitMQ topic exchange semantics:</p>
+ * <ul>
+ *   <li>Segments separated by '.' (dot)</li>
+ *   <li>'*' matches exactly one segment</li>
+ *   <li>'#' matches zero or more segments</li>
+ * </ul>
  */
 class MessageTypeHandlerRegistryTest {
 
@@ -89,13 +97,13 @@ class MessageTypeHandlerRegistryTest {
         assertThat(registry.getHandlerCount()).isEqualTo(1);
 
         // Verify first handler is kept
-        ProxyResponse response = createResponse("duplicate.type");
-        registry.dispatch(response);
-        verify(firstHandler).handleResponse(response);
+        ProxyMessage message = createMessage("duplicate.type");
+        registry.dispatch(message);
+        verify(firstHandler).handleResponse(message);
         verify(secondHandler, never()).handleResponse(any());
     }
 
-    // ==================== hasHandler Tests ====================
+    // ==================== hasHandler - Exact Match Tests ====================
 
     @Test
     void hasHandler_withExactMatch_returnsTrue() {
@@ -105,18 +113,6 @@ class MessageTypeHandlerRegistryTest {
         registry.init();
 
         assertThat(registry.hasHandler("certificate.issued")).isTrue();
-    }
-
-    @Test
-    void hasHandler_withWildcardMatch_returnsTrue() {
-        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
-                List.of(createHandler("POST:/v1/certificates/*"))
-        );
-        registry.init();
-
-        assertThat(registry.hasHandler("POST:/v1/certificates/issue")).isTrue();
-        assertThat(registry.hasHandler("POST:/v1/certificates/revoke")).isTrue();
-        assertThat(registry.hasHandler("POST:/v1/certificates/anything")).isTrue();
     }
 
     @Test
@@ -140,16 +136,193 @@ class MessageTypeHandlerRegistryTest {
         assertThat(registry.hasHandler(null)).isFalse();
     }
 
+    // ==================== hasHandler - Single-Segment Wildcard (*) Tests ====================
+
     @Test
-    void hasHandler_wildcardDoesNotMatchPartialPrefix() {
+    void hasHandler_singleWildcard_matchesExactlyOneSegment() {
         MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
-                List.of(createHandler("POST:/v1/certificates/*"))
+                List.of(createHandler("GET.v1.certificates.*"))
         );
         registry.init();
 
-        // Should not match because path doesn't start with full prefix
-        assertThat(registry.hasHandler("POST:/v1/cert")).isFalse();
-        assertThat(registry.hasHandler("GET:/v1/certificates/issue")).isFalse();
+        // Should match: exactly one segment after certificates
+        assertThat(registry.hasHandler("GET.v1.certificates.123")).isTrue();
+        assertThat(registry.hasHandler("GET.v1.certificates.abc")).isTrue();
+
+        // Should NOT match: no segment after certificates
+        assertThat(registry.hasHandler("GET.v1.certificates")).isFalse();
+
+        // Should NOT match: more than one segment after certificates
+        assertThat(registry.hasHandler("GET.v1.certificates.123.details")).isFalse();
+    }
+
+    @Test
+    void hasHandler_singleWildcard_atStart() {
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(createHandler("*.v1.certificates"))
+        );
+        registry.init();
+
+        assertThat(registry.hasHandler("GET.v1.certificates")).isTrue();
+        assertThat(registry.hasHandler("POST.v1.certificates")).isTrue();
+
+        // Wrong number of segments
+        assertThat(registry.hasHandler("v1.certificates")).isFalse();
+        assertThat(registry.hasHandler("GET.POST.v1.certificates")).isFalse();
+    }
+
+    @Test
+    void hasHandler_singleWildcard_inMiddle() {
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(createHandler("GET.*.certificates"))
+        );
+        registry.init();
+
+        assertThat(registry.hasHandler("GET.v1.certificates")).isTrue();
+        assertThat(registry.hasHandler("GET.v2.certificates")).isTrue();
+
+        // Wrong number of middle segments
+        assertThat(registry.hasHandler("GET.certificates")).isFalse();
+        assertThat(registry.hasHandler("GET.v1.v2.certificates")).isFalse();
+    }
+
+    @Test
+    void hasHandler_multipleStarWildcards() {
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(createHandler("*.v1.*.issue"))
+        );
+        registry.init();
+
+        assertThat(registry.hasHandler("POST.v1.certificates.issue")).isTrue();
+        assertThat(registry.hasHandler("GET.v1.authorities.issue")).isTrue();
+
+        // Wrong number of segments
+        assertThat(registry.hasHandler("POST.v1.certificates")).isFalse();
+        assertThat(registry.hasHandler("POST.v1.certificates.123.issue")).isFalse();
+    }
+
+    // ==================== hasHandler - Multi-Segment Wildcard (#) Tests ====================
+
+    @Test
+    void hasHandler_hashWildcard_matchesZeroOrMoreSegments() {
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(createHandler("GET.v1.#"))
+        );
+        registry.init();
+
+        // Zero segments after v1
+        assertThat(registry.hasHandler("GET.v1")).isTrue();
+
+        // One segment
+        assertThat(registry.hasHandler("GET.v1.certificates")).isTrue();
+
+        // Multiple segments
+        assertThat(registry.hasHandler("GET.v1.certificates.123.details")).isTrue();
+    }
+
+    @Test
+    void hasHandler_hashAtEnd_matchesEverythingAfter() {
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(createHandler("audit.events.#"))
+        );
+        registry.init();
+
+        assertThat(registry.hasHandler("audit.events")).isTrue();
+        assertThat(registry.hasHandler("audit.events.users")).isTrue();
+        assertThat(registry.hasHandler("audit.events.users.signup")).isTrue();
+        assertThat(registry.hasHandler("audit.events.orders.placed.confirmed")).isTrue();
+
+        // Different prefix should not match
+        assertThat(registry.hasHandler("audit.logs.events")).isFalse();
+    }
+
+    @Test
+    void hasHandler_hashOnly_matchesEverything() {
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(createHandler("#"))
+        );
+        registry.init();
+
+        // Fanout behavior - matches everything
+        assertThat(registry.hasHandler("GET.v1.certificates")).isTrue();
+        assertThat(registry.hasHandler("POST.anything.at.all")).isTrue();
+        assertThat(registry.hasHandler("single")).isTrue();
+        assertThat(registry.hasHandler("a.b.c.d.e.f.g")).isTrue();
+    }
+
+    @Test
+    void hasHandler_hashInMiddle_matchesVariableSegments() {
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(createHandler("events.#.completed"))
+        );
+        registry.init();
+
+        // Zero middle segments
+        assertThat(registry.hasHandler("events.completed")).isTrue();
+
+        // One middle segment
+        assertThat(registry.hasHandler("events.order.completed")).isTrue();
+
+        // Multiple middle segments
+        assertThat(registry.hasHandler("events.order.payment.completed")).isTrue();
+
+        // Wrong ending
+        assertThat(registry.hasHandler("events.order.failed")).isFalse();
+    }
+
+    @Test
+    void hasHandler_hashAtStart() {
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(createHandler("#.completed"))
+        );
+        registry.init();
+
+        assertThat(registry.hasHandler("completed")).isTrue();
+        assertThat(registry.hasHandler("task.completed")).isTrue();
+        assertThat(registry.hasHandler("workflow.task.completed")).isTrue();
+
+        assertThat(registry.hasHandler("completed.extra")).isFalse();
+    }
+
+    // ==================== hasHandler - Combined Wildcard Tests ====================
+
+    @Test
+    void hasHandler_starAndHashCombined() {
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(createHandler("*.events.#"))
+        );
+        registry.init();
+
+        assertThat(registry.hasHandler("audit.events")).isTrue();
+        assertThat(registry.hasHandler("system.events.user.login")).isTrue();
+        assertThat(registry.hasHandler("app.events.order.created.processed")).isTrue();
+
+        // Wrong - first segment must be exactly one
+        assertThat(registry.hasHandler("events")).isFalse();
+        assertThat(registry.hasHandler("audit.log.events")).isFalse();
+    }
+
+    @Test
+    void hasHandler_hashThenStar() {
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(createHandler("#.resource.*"))
+        );
+        registry.init();
+
+        // # matches zero, then resource, then exactly one
+        assertThat(registry.hasHandler("resource.123")).isTrue();
+
+        // # matches one, then resource, then exactly one
+        assertThat(registry.hasHandler("api.resource.456")).isTrue();
+
+        // # matches multiple, then resource, then exactly one
+        assertThat(registry.hasHandler("v1.api.resource.789")).isTrue();
+
+        // Missing the final segment for *
+        assertThat(registry.hasHandler("api.resource")).isFalse();
+
+        // Too many segments after resource
+        assertThat(registry.hasHandler("api.resource.123.456")).isFalse();
     }
 
     // ==================== dispatch - Exact Match Tests ====================
@@ -160,11 +333,11 @@ class MessageTypeHandlerRegistryTest {
         MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(List.of(handler));
         registry.init();
 
-        ProxyResponse response = createResponse("certificate.issued");
-        boolean result = registry.dispatch(response);
+        ProxyMessage message = createMessage("certificate.issued");
+        boolean result = registry.dispatch(message);
 
         assertThat(result).isTrue();
-        verify(handler).handleResponse(response);
+        verify(handler).handleResponse(message);
     }
 
     @Test
@@ -174,58 +347,154 @@ class MessageTypeHandlerRegistryTest {
         );
         registry.init();
 
-        assertThat(registry.dispatch(createResponse("certificate.issued"))).isTrue();
+        assertThat(registry.dispatch(createMessage("certificate.issued"))).isTrue();
     }
 
     // ==================== dispatch - Wildcard Match Tests ====================
 
     @Test
-    void dispatch_withWildcardMatch_invokesHandler() {
-        MessageTypeResponseHandler handler = createHandler("POST:/v1/certificates/*");
+    void dispatch_withSingleWildcardMatch_invokesHandler() {
+        MessageTypeResponseHandler handler = createHandler("POST.v1.certificates.*");
         MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(List.of(handler));
         registry.init();
 
-        ProxyResponse response = createResponse("POST:/v1/certificates/issue");
-        boolean result = registry.dispatch(response);
+        ProxyMessage message = createMessage("POST.v1.certificates.issue");
+        boolean result = registry.dispatch(message);
 
         assertThat(result).isTrue();
-        verify(handler).handleResponse(response);
+        verify(handler).handleResponse(message);
     }
 
     @Test
-    void dispatch_longerPrefixWins_overShorterPrefix() {
-        MessageTypeResponseHandler shortHandler = createHandler("POST:/*");
-        MessageTypeResponseHandler longHandler = createHandler("POST:/v1/certificates/*");
-
-        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
-                List.of(shortHandler, longHandler)
-        );
+    void dispatch_withHashWildcardMatch_invokesHandler() {
+        MessageTypeResponseHandler handler = createHandler("audit.#");
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(List.of(handler));
         registry.init();
 
-        ProxyResponse response = createResponse("POST:/v1/certificates/issue");
-        registry.dispatch(response);
+        ProxyMessage message = createMessage("audit.events.user.login");
+        boolean result = registry.dispatch(message);
 
-        // Longer prefix should win
-        verify(longHandler).handleResponse(response);
-        verify(shortHandler, never()).handleResponse(any());
+        assertThat(result).isTrue();
+        verify(handler).handleResponse(message);
     }
+
+    // ==================== dispatch - Specificity/Precedence Tests ====================
 
     @Test
     void dispatch_exactMatchTakesPrecedence_overWildcard() {
-        MessageTypeResponseHandler wildcardHandler = createHandler("POST:/v1/certificates/*");
-        MessageTypeResponseHandler exactHandler = createHandler("POST:/v1/certificates/issue");
+        MessageTypeResponseHandler wildcardHandler = createHandler("GET.v1.certificates.*");
+        MessageTypeResponseHandler exactHandler = createHandler("GET.v1.certificates.special");
 
         MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
                 List.of(wildcardHandler, exactHandler)
         );
         registry.init();
 
-        ProxyResponse response = createResponse("POST:/v1/certificates/issue");
-        registry.dispatch(response);
+        ProxyMessage message = createMessage("GET.v1.certificates.special");
+        registry.dispatch(message);
 
         // Exact match should take precedence
-        verify(exactHandler).handleResponse(response);
+        verify(exactHandler).handleResponse(message);
         verify(wildcardHandler, never()).handleResponse(any());
+    }
+
+    @Test
+    void dispatch_moreSpecificPatternWins() {
+        MessageTypeResponseHandler generalHandler = createHandler("GET.#");
+        MessageTypeResponseHandler specificHandler = createHandler("GET.v1.certificates.*");
+
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(generalHandler, specificHandler)
+        );
+        registry.init();
+
+        ProxyMessage message = createMessage("GET.v1.certificates.123");
+        registry.dispatch(message);
+
+        // More specific pattern (with literal segments) wins
+        verify(specificHandler).handleResponse(message);
+        verify(generalHandler, never()).handleResponse(any());
+    }
+
+    @Test
+    void dispatch_literalBeatsWildcard() {
+        MessageTypeResponseHandler wildcardHandler = createHandler("GET.v1.certificates.*");
+        MessageTypeResponseHandler literalHandler = createHandler("GET.v1.certificates.special");
+
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(wildcardHandler, literalHandler)
+        );
+        registry.init();
+
+        // Message matching both patterns
+        ProxyMessage message = createMessage("GET.v1.certificates.special");
+        registry.dispatch(message);
+
+        // Literal match wins
+        verify(literalHandler).handleResponse(message);
+        verify(wildcardHandler, never()).handleResponse(any());
+    }
+
+    @Test
+    void dispatch_starBeatsHash() {
+        MessageTypeResponseHandler hashHandler = createHandler("GET.v1.#");
+        MessageTypeResponseHandler starHandler = createHandler("GET.v1.*");
+
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(hashHandler, starHandler)
+        );
+        registry.init();
+
+        // Message with single segment after v1
+        ProxyMessage message = createMessage("GET.v1.certificates");
+        registry.dispatch(message);
+
+        // * is more specific than # (matches exactly one vs zero-or-more)
+        verify(starHandler).handleResponse(message);
+        verify(hashHandler, never()).handleResponse(any());
+    }
+
+    @Test
+    void dispatch_longerPatternWins() {
+        MessageTypeResponseHandler shortHandler = createHandler("GET.*");
+        MessageTypeResponseHandler longHandler = createHandler("GET.v1.certificates.*");
+
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(shortHandler, longHandler)
+        );
+        registry.init();
+
+        ProxyMessage message = createMessage("GET.v1.certificates.issue");
+        registry.dispatch(message);
+
+        // Longer pattern with more literal segments should win
+        verify(longHandler).handleResponse(message);
+        verify(shortHandler, never()).handleResponse(any());
+    }
+
+    @Test
+    void dispatch_multipleWildcards_mostSpecificWins() {
+        MessageTypeResponseHandler level1 = createHandler("GET.#");
+        MessageTypeResponseHandler level2 = createHandler("GET.v1.#");
+        MessageTypeResponseHandler level3 = createHandler("GET.v1.certificates.#");
+
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(level1, level2, level3)
+        );
+        registry.init();
+
+        // Test different paths - most specific (highest specificity score) should win
+        ProxyMessage message1 = createMessage("GET.v1.certificates.123");
+        registry.dispatch(message1);
+        verify(level3).handleResponse(message1);
+
+        ProxyMessage message2 = createMessage("GET.v1.keys.456");
+        registry.dispatch(message2);
+        verify(level2).handleResponse(message2);
+
+        ProxyMessage message3 = createMessage("GET.other.path");
+        registry.dispatch(message3);
+        verify(level1).handleResponse(message3);
     }
 
     // ==================== dispatch - No Match Tests ====================
@@ -237,7 +506,7 @@ class MessageTypeHandlerRegistryTest {
         );
         registry.init();
 
-        assertThat(registry.dispatch(createResponse("unknown.type"))).isFalse();
+        assertThat(registry.dispatch(createMessage("unknown.type"))).isFalse();
     }
 
     @Test
@@ -257,7 +526,7 @@ class MessageTypeHandlerRegistryTest {
         );
         registry.init();
 
-        assertThat(registry.dispatch(createResponse(null))).isFalse();
+        assertThat(registry.dispatch(createMessage(null))).isFalse();
     }
 
     // ==================== Handler Error Tests ====================
@@ -271,62 +540,67 @@ class MessageTypeHandlerRegistryTest {
         MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(List.of(failingHandler));
         registry.init();
 
-        ProxyResponse response = createResponse("failing.type");
-        boolean result = registry.dispatch(response);
+        ProxyMessage message = createMessage("failing.type");
+        boolean result = registry.dispatch(message);
 
         assertThat(result).isFalse();
-        verify(failingHandler).handleResponse(response);
+        verify(failingHandler).handleResponse(message);
     }
 
-    // ==================== Pattern Matching Edge Cases ====================
+    // ==================== Edge Cases ====================
 
     @Test
-    void dispatch_wildcardOnlyMatchesAtEnd() {
+    void matches_consecutiveWildcards_workCorrectly() {
         MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
-                List.of(createHandler("POST:/v1/*/certificates"))
+                List.of(createHandler("*.*.end"))
         );
         registry.init();
 
-        // Pattern doesn't end with /*, so it's treated as exact match
-        assertThat(registry.hasHandler("POST:/v1/something/certificates")).isFalse();
-        assertThat(registry.hasHandler("POST:/v1/*/certificates")).isTrue();
+        assertThat(registry.hasHandler("a.b.end")).isTrue();
+        assertThat(registry.hasHandler("x.y.end")).isTrue();
+
+        // Wrong number of segments before 'end'
+        assertThat(registry.hasHandler("a.end")).isFalse();
+        assertThat(registry.hasHandler("a.b.c.end")).isFalse();
     }
 
     @Test
-    void dispatch_emptyPrefixWildcard() {
+    void matches_emptySegments_handledCorrectly() {
         MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
-                List.of(createHandler("/*"))
+                List.of(createHandler("a..b"))
         );
         registry.init();
 
-        // Empty prefix wildcard should match anything starting with empty string
-        assertThat(registry.hasHandler("/anything")).isTrue();
-        assertThat(registry.hasHandler("/v1/certificates")).isTrue();
+        // Pattern with empty segment
+        assertThat(registry.hasHandler("a..b")).isTrue();
+        assertThat(registry.hasHandler("a.x.b")).isFalse();
     }
 
     @Test
-    void dispatch_multipleWildcards_longestPrefixWins() {
-        MessageTypeResponseHandler level1 = createHandler("GET:/*");
-        MessageTypeResponseHandler level2 = createHandler("GET:/v1/*");
-        MessageTypeResponseHandler level3 = createHandler("GET:/v1/certificates/*");
-
+    void matches_singleSegmentPattern() {
         MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
-                List.of(level1, level2, level3)
+                List.of(createHandler("*"))
         );
         registry.init();
 
-        // Test different paths - longest matching prefix should win
-        ProxyResponse response1 = createResponse("GET:/v1/certificates/123");
-        registry.dispatch(response1);
-        verify(level3).handleResponse(response1);
+        assertThat(registry.hasHandler("anything")).isTrue();
+        assertThat(registry.hasHandler("multi.segment")).isFalse();
+    }
 
-        ProxyResponse response2 = createResponse("GET:/v1/keys/456");
-        registry.dispatch(response2);
-        verify(level2).handleResponse(response2);
+    @Test
+    void matches_multipleHashPatterns() {
+        MessageTypeHandlerRegistry registry = new MessageTypeHandlerRegistry(
+                List.of(createHandler("#.middle.#"))
+        );
+        registry.init();
 
-        ProxyResponse response3 = createResponse("GET:/other/path");
-        registry.dispatch(response3);
-        verify(level1).handleResponse(response3);
+        assertThat(registry.hasHandler("middle")).isTrue();
+        assertThat(registry.hasHandler("before.middle")).isTrue();
+        assertThat(registry.hasHandler("middle.after")).isTrue();
+        assertThat(registry.hasHandler("before.middle.after")).isTrue();
+        assertThat(registry.hasHandler("a.b.middle.c.d")).isTrue();
+
+        assertThat(registry.hasHandler("nomiddlehere")).isFalse();
     }
 
     // ==================== getHandlerCount Tests ====================
@@ -366,12 +640,15 @@ class MessageTypeHandlerRegistryTest {
         return handler;
     }
 
-    private ProxyResponse createResponse(String messageType) {
-        return ProxyResponse.builder()
+    private ProxyMessage createMessage(String messageType) {
+        return ProxyMessage.builder()
                 .correlationId("test-corr")
+                .proxyId("test-proxy")
                 .messageType(messageType)
-                .statusCode(200)
                 .timestamp(Instant.now())
+                .connectorResponse(ConnectorResponse.builder()
+                        .statusCode(200)
+                        .build())
                 .build();
     }
 }

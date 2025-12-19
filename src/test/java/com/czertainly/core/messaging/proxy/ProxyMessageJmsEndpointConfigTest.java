@@ -1,6 +1,6 @@
 package com.czertainly.core.messaging.proxy;
 
-import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.clients.mq.model.ProxyMessage;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
 import com.czertainly.core.messaging.jms.listeners.MessageProcessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,14 +19,14 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for {@link ProxyResponseJmsEndpointConfig}.
+ * Unit tests for {@link ProxyMessageJmsEndpointConfig}.
  * Tests ServiceBus vs RabbitMQ specific endpoint configuration.
  */
 @ExtendWith(MockitoExtension.class)
-class ProxyResponseJmsEndpointConfigTest {
+class ProxyMessageJmsEndpointConfigTest {
 
     @Mock
-    private MessageProcessor<ProxyResponse> messageProcessor;
+    private MessageProcessor<ProxyMessage> messageProcessor;
 
     @Mock
     private MessagingProperties messagingProperties;
@@ -34,7 +34,7 @@ class ProxyResponseJmsEndpointConfigTest {
     @Mock
     private RetryTemplate retryTemplate;
 
-    private ProxyResponseJmsEndpointConfig config;
+    private ProxyMessageJmsEndpointConfig config;
 
     @BeforeEach
     void setUp() {
@@ -46,7 +46,7 @@ class ProxyResponseJmsEndpointConfigTest {
                 null
         );
 
-        config = new ProxyResponseJmsEndpointConfig(proxyProperties);
+        config = new ProxyMessageJmsEndpointConfig(proxyProperties);
         ReflectionTestUtils.setField(config, "listenerMessageProcessor", messageProcessor);
         ReflectionTestUtils.setField(config, "jmsRetryTemplate", retryTemplate);
         ReflectionTestUtils.setField(config, "messagingProperties", messagingProperties);

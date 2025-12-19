@@ -1,7 +1,7 @@
 package com.czertainly.core.messaging.proxy;
 
 import com.czertainly.api.clients.mq.model.ConnectorRequest;
-import com.czertainly.api.clients.mq.model.ProxyRequest;
+import com.czertainly.api.clients.mq.model.CoreMessage;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
 import jakarta.jms.JMSException;
 import jakarta.jms.Message;
@@ -25,11 +25,11 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for {@link ProxyMessageProducer}.
+ * Unit tests for {@link CoreMessageProducer}.
  * Tests message sending with different broker configurations.
  */
 @ExtendWith(MockitoExtension.class)
-class ProxyMessageProducerTest {
+class CoreMessageProducerTest {
 
     @Mock
     private JmsTemplate jmsTemplate;
@@ -44,7 +44,7 @@ class ProxyMessageProducerTest {
     private ArgumentCaptor<MessagePostProcessor> postProcessorCaptor;
 
     private ProxyProperties proxyProperties;
-    private ProxyMessageProducer producer;
+    private CoreMessageProducer producer;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -62,7 +62,7 @@ class ProxyMessageProducerTest {
             return callback.doWithRetry(null);
         });
 
-        producer = new ProxyMessageProducer(jmsTemplate, proxyProperties, messagingProperties, retryTemplate);
+        producer = new CoreMessageProducer(jmsTemplate, proxyProperties, messagingProperties, retryTemplate);
     }
 
     // ==================== ServiceBus Tests ====================
@@ -71,12 +71,12 @@ class ProxyMessageProducerTest {
     void send_withServiceBus_usesTopicDirectly() throws JMSException {
         when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
 
-        ProxyRequest request = createProxyRequest("corr-1");
-        producer.send(request, "proxy-001");
+        CoreMessage message = createCoreMessage("corr-1");
+        producer.send(message, "proxy-001");
 
         verify(jmsTemplate).convertAndSend(
                 eq("czertainly-proxy"),
-                eq(request),
+                eq(message),
                 any(MessagePostProcessor.class)
         );
     }
@@ -85,12 +85,12 @@ class ProxyMessageProducerTest {
     void send_withServiceBus_setsJMSTypeToRoutingKey() throws JMSException {
         when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
 
-        ProxyRequest request = createProxyRequest("corr-1");
-        producer.send(request, "proxy-001");
+        CoreMessage message = createCoreMessage("corr-1");
+        producer.send(message, "proxy-001");
 
         verify(jmsTemplate).convertAndSend(
                 any(String.class),
-                eq(request),
+                eq(message),
                 postProcessorCaptor.capture()
         );
 
@@ -98,19 +98,19 @@ class ProxyMessageProducerTest {
         Message mockMessage = mock(Message.class);
         postProcessorCaptor.getValue().postProcessMessage(mockMessage);
 
-        verify(mockMessage).setJMSType("request.proxy-001");
+        verify(mockMessage).setJMSType("coremessage.proxy-001");
     }
 
     @Test
     void send_withServiceBus_setsJMSCorrelationID() throws JMSException {
         when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
 
-        ProxyRequest request = createProxyRequest("my-correlation-id");
-        producer.send(request, "proxy-001");
+        CoreMessage message = createCoreMessage("my-correlation-id");
+        producer.send(message, "proxy-001");
 
         verify(jmsTemplate).convertAndSend(
                 any(String.class),
-                eq(request),
+                eq(message),
                 postProcessorCaptor.capture()
         );
 
@@ -127,12 +127,12 @@ class ProxyMessageProducerTest {
         when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.RABBITMQ);
         when(messagingProperties.exchangePrefix()).thenReturn("/exchanges/");
 
-        ProxyRequest request = createProxyRequest("corr-1");
-        producer.send(request, "proxy-002");
+        CoreMessage message = createCoreMessage("corr-1");
+        producer.send(message, "proxy-002");
 
         verify(jmsTemplate).convertAndSend(
                 eq("/exchanges/czertainly-proxy"),
-                eq(request),
+                eq(message),
                 any(MessagePostProcessor.class)
         );
     }
@@ -142,12 +142,12 @@ class ProxyMessageProducerTest {
         when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.RABBITMQ);
         when(messagingProperties.exchangePrefix()).thenReturn(null);
 
-        ProxyRequest request = createProxyRequest("corr-1");
-        producer.send(request, "proxy-003");
+        CoreMessage message = createCoreMessage("corr-1");
+        producer.send(message, "proxy-003");
 
         verify(jmsTemplate).convertAndSend(
                 eq("czertainly-proxy"),
-                eq(request),
+                eq(message),
                 any(MessagePostProcessor.class)
         );
     }
@@ -157,19 +157,19 @@ class ProxyMessageProducerTest {
         when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.RABBITMQ);
         when(messagingProperties.exchangePrefix()).thenReturn("/exchanges/");
 
-        ProxyRequest request = createProxyRequest("corr-1");
-        producer.send(request, "my-proxy-instance");
+        CoreMessage message = createCoreMessage("corr-1");
+        producer.send(message, "my-proxy-instance");
 
         verify(jmsTemplate).convertAndSend(
                 any(String.class),
-                eq(request),
+                eq(message),
                 postProcessorCaptor.capture()
         );
 
         Message mockMessage = mock(Message.class);
         postProcessorCaptor.getValue().postProcessMessage(mockMessage);
 
-        verify(mockMessage).setJMSType("request.my-proxy-instance");
+        verify(mockMessage).setJMSType("coremessage.my-proxy-instance");
     }
 
     // ==================== Retry Tests ====================
@@ -178,13 +178,13 @@ class ProxyMessageProducerTest {
     void send_usesRetryTemplate() throws Exception {
         when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
 
-        ProxyRequest request = createProxyRequest("corr-1");
-        producer.send(request, "proxy-001");
+        CoreMessage message = createCoreMessage("corr-1");
+        producer.send(message, "proxy-001");
 
         verify(retryTemplate).execute(any());
         verify(jmsTemplate).convertAndSend(
                 any(String.class),
-                eq(request),
+                eq(message),
                 any(MessagePostProcessor.class)
         );
     }
@@ -196,45 +196,45 @@ class ProxyMessageProducerTest {
         when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
 
         // First request
-        producer.send(createProxyRequest("corr-1"), "proxy-alpha");
+        producer.send(createCoreMessage("corr-1"), "proxy-alpha");
 
         verify(jmsTemplate).convertAndSend(
                 any(String.class),
-                any(ProxyRequest.class),
+                any(CoreMessage.class),
                 postProcessorCaptor.capture()
         );
 
         Message mockMessage1 = mock(Message.class);
         postProcessorCaptor.getValue().postProcessMessage(mockMessage1);
-        verify(mockMessage1).setJMSType("request.proxy-alpha");
+        verify(mockMessage1).setJMSType("coremessage.proxy-alpha");
 
         // Reset for second request
         reset(jmsTemplate);
 
         // Second request with different proxyId
-        producer.send(createProxyRequest("corr-2"), "proxy-beta");
+        producer.send(createCoreMessage("corr-2"), "proxy-beta");
 
         verify(jmsTemplate).convertAndSend(
                 any(String.class),
-                any(ProxyRequest.class),
+                any(CoreMessage.class),
                 postProcessorCaptor.capture()
         );
 
         Message mockMessage2 = mock(Message.class);
         postProcessorCaptor.getValue().postProcessMessage(mockMessage2);
-        verify(mockMessage2).setJMSType("request.proxy-beta");
+        verify(mockMessage2).setJMSType("coremessage.proxy-beta");
     }
 
     @Test
-    void send_preservesRequestCorrelationId() throws JMSException {
+    void send_preservesMessageCorrelationId() throws JMSException {
         when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
 
-        ProxyRequest request = createProxyRequest("unique-correlation-123");
-        producer.send(request, "proxy-001");
+        CoreMessage message = createCoreMessage("unique-correlation-123");
+        producer.send(message, "proxy-001");
 
         verify(jmsTemplate).convertAndSend(
                 any(String.class),
-                eq(request),
+                eq(message),
                 postProcessorCaptor.capture()
         );
 
@@ -246,8 +246,8 @@ class ProxyMessageProducerTest {
 
     // ==================== Helper Methods ====================
 
-    private ProxyRequest createProxyRequest(String correlationId) {
-        return ProxyRequest.builder()
+    private CoreMessage createCoreMessage(String correlationId) {
+        return CoreMessage.builder()
                 .correlationId(correlationId)
                 .messageType("POST:/v1/test")
                 .timestamp(Instant.now())

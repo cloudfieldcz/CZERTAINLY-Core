@@ -1,6 +1,7 @@
 package com.czertainly.core.messaging.proxy;
 
-import com.czertainly.api.clients.mq.model.ProxyResponse;
+import com.czertainly.api.clients.mq.model.ConnectorResponse;
+import com.czertainly.api.clients.mq.model.ProxyMessage;
 import com.czertainly.core.util.BaseSpringBootTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,15 +20,15 @@ import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Integration tests for {@link ProxyResponseCorrelator}.
+ * Integration tests for {@link ProxyMessageCorrelator}.
  * Tests real timeout behavior, threading, and capacity enforcement with Spring context.
  */
-class ProxyResponseCorrelatorIntegrationTest extends BaseSpringBootTest {
+class ProxyMessageCorrelatorIntegrationTest extends BaseSpringBootTest {
 
     @Autowired
     private ProxyProperties proxyProperties;
 
-    private ProxyResponseCorrelator correlator;
+    private ProxyMessageCorrelator correlator;
 
     @BeforeEach
     void setUpCorrelator() {
@@ -39,7 +40,7 @@ class ProxyResponseCorrelatorIntegrationTest extends BaseSpringBootTest {
                 100, // Low capacity for testing
                 proxyProperties.redis()
         );
-        correlator = new ProxyResponseCorrelator(testProps);
+        correlator = new ProxyMessageCorrelator(testProps);
     }
 
     @AfterEach
@@ -56,25 +57,20 @@ class ProxyResponseCorrelatorIntegrationTest extends BaseSpringBootTest {
     void registerAndComplete_endToEnd() throws Exception {
         String correlationId = "int-test-corr-1";
 
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofSeconds(5));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofSeconds(5));
         assertThat(future.isDone()).isFalse();
         assertThat(correlator.getPendingCount()).isEqualTo(1);
 
-        ProxyResponse response = ProxyResponse.builder()
-                .correlationId(correlationId)
-                .statusCode(200)
-                .body("success")
-                .timestamp(Instant.now())
-                .build();
+        ProxyMessage message = createMessage(correlationId, 200, "success");
 
-        correlator.completeRequest(response);
+        correlator.completeRequest(message);
 
         assertThat(future.isDone()).isTrue();
         assertThat(correlator.getPendingCount()).isZero();
 
-        ProxyResponse result = future.get();
+        ProxyMessage result = future.get();
         assertThat(result.getCorrelationId()).isEqualTo(correlationId);
-        assertThat(result.getStatusCode()).isEqualTo(200);
+        assertThat(result.getConnectorResponse().getStatusCode()).isEqualTo(200);
     }
 
     @Test
@@ -84,24 +80,24 @@ class ProxyResponseCorrelatorIntegrationTest extends BaseSpringBootTest {
         String correlationId = "int-test-timeout";
 
         // Use short timeout
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofMillis(200));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofMillis(200));
 
         // Wait for timeout using Awaitility
         await().atMost(Duration.ofSeconds(2)).until(future::isDone);
 
-        ProxyResponse response = future.get();
-        assertThat(response).isNotNull();
-        assertThat(response.getCorrelationId()).isEqualTo(correlationId);
-        assertThat(response.getStatusCode()).isZero();
-        assertThat(response.getErrorCategory()).isEqualTo("timeout");
-        assertThat(response.isRetryable()).isTrue();
+        ProxyMessage message = future.get();
+        assertThat(message).isNotNull();
+        assertThat(message.getCorrelationId()).isEqualTo(correlationId);
+        assertThat(message.getConnectorResponse().getStatusCode()).isZero();
+        assertThat(message.getConnectorResponse().getErrorCategory()).isEqualTo("timeout");
+        assertThat(message.getConnectorResponse().isRetryable()).isTrue();
     }
 
     @Test
     @Timeout(value = 10, unit = TimeUnit.SECONDS)
     @DisplayName("Shutdown gracefully completes all pending requests with non-retryable error")
     void shutdown_gracefullyHandlesPendingRequests() throws Exception {
-        List<CompletableFuture<ProxyResponse>> futures = new ArrayList<>();
+        List<CompletableFuture<ProxyMessage>> futures = new ArrayList<>();
 
         // Register several requests
         for (int i = 0; i < 5; i++) {
@@ -114,11 +110,11 @@ class ProxyResponseCorrelatorIntegrationTest extends BaseSpringBootTest {
         correlator.shutdown();
 
         // All futures should be completed with shutdown error
-        for (CompletableFuture<ProxyResponse> future : futures) {
+        for (CompletableFuture<ProxyMessage> future : futures) {
             assertThat(future.isDone()).isTrue();
-            ProxyResponse response = future.get();
-            assertThat(response.getErrorCategory()).isEqualTo("connection");
-            assertThat(response.isRetryable()).isFalse();
+            ProxyMessage message = future.get();
+            assertThat(message.getConnectorResponse().getErrorCategory()).isEqualTo("connection");
+            assertThat(message.getConnectorResponse().isRetryable()).isFalse();
         }
 
         assertThat(correlator.getPendingCount()).isZero();
@@ -133,7 +129,7 @@ class ProxyResponseCorrelatorIntegrationTest extends BaseSpringBootTest {
         ExecutorService executor = Executors.newFixedThreadPool(numThreads);
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch doneLatch = new CountDownLatch(numThreads);
-        CopyOnWriteArrayList<CompletableFuture<ProxyResponse>> allFutures = new CopyOnWriteArrayList<>();
+        CopyOnWriteArrayList<CompletableFuture<ProxyMessage>> allFutures = new CopyOnWriteArrayList<>();
         CopyOnWriteArrayList<String> allCorrelationIds = new CopyOnWriteArrayList<>();
 
         // Launch threads that register and complete requests
@@ -146,17 +142,13 @@ class ProxyResponseCorrelatorIntegrationTest extends BaseSpringBootTest {
                         String correlationId = "thread-" + threadId + "-req-" + i;
                         allCorrelationIds.add(correlationId);
 
-                        CompletableFuture<ProxyResponse> future = correlator.registerRequest(
+                        CompletableFuture<ProxyMessage> future = correlator.registerRequest(
                                 correlationId, Duration.ofSeconds(10));
                         allFutures.add(future);
 
                         // Complete half immediately
                         if (i % 2 == 0) {
-                            correlator.completeRequest(ProxyResponse.builder()
-                                    .correlationId(correlationId)
-                                    .statusCode(200)
-                                    .timestamp(Instant.now())
-                                    .build());
+                            correlator.completeRequest(createMessage(correlationId, 200, null));
                         }
                     }
                 } catch (Exception e) {
@@ -177,11 +169,7 @@ class ProxyResponseCorrelatorIntegrationTest extends BaseSpringBootTest {
 
         // Complete remaining requests
         for (String correlationId : allCorrelationIds) {
-            correlator.completeRequest(ProxyResponse.builder()
-                    .correlationId(correlationId)
-                    .statusCode(200)
-                    .timestamp(Instant.now())
-                    .build());
+            correlator.completeRequest(createMessage(correlationId, 200, null));
         }
 
         // All futures should be completed
@@ -207,23 +195,15 @@ class ProxyResponseCorrelatorIntegrationTest extends BaseSpringBootTest {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     void tryCompleteRequest_worksCorrectly() {
         String correlationId = "try-complete-test";
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofSeconds(5));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofSeconds(5));
 
         // Try with wrong ID
-        boolean wrongResult = correlator.tryCompleteRequest(ProxyResponse.builder()
-                .correlationId("wrong-id")
-                .statusCode(200)
-                .timestamp(Instant.now())
-                .build());
+        boolean wrongResult = correlator.tryCompleteRequest(createMessage("wrong-id", 200, null));
         assertThat(wrongResult).isFalse();
         assertThat(future.isDone()).isFalse();
 
         // Try with correct ID
-        boolean correctResult = correlator.tryCompleteRequest(ProxyResponse.builder()
-                .correlationId(correlationId)
-                .statusCode(200)
-                .timestamp(Instant.now())
-                .build());
+        boolean correctResult = correlator.tryCompleteRequest(createMessage(correlationId, 200, null));
         assertThat(correctResult).isTrue();
         assertThat(future.isDone()).isTrue();
     }
@@ -232,7 +212,7 @@ class ProxyResponseCorrelatorIntegrationTest extends BaseSpringBootTest {
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     void cancelRequest_worksCorrectly() {
         String correlationId = "cancel-test";
-        CompletableFuture<ProxyResponse> future = correlator.registerRequest(correlationId, Duration.ofSeconds(5));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofSeconds(5));
 
         assertThat(correlator.getPendingCount()).isEqualTo(1);
 
@@ -243,5 +223,19 @@ class ProxyResponseCorrelatorIntegrationTest extends BaseSpringBootTest {
 
         // Second cancel should return false
         assertThat(correlator.cancelRequest(correlationId)).isFalse();
+    }
+
+    // ==================== Helper Methods ====================
+
+    private ProxyMessage createMessage(String correlationId, int statusCode, Object body) {
+        return ProxyMessage.builder()
+                .correlationId(correlationId)
+                .proxyId("test-proxy")
+                .timestamp(Instant.now())
+                .connectorResponse(ConnectorResponse.builder()
+                        .statusCode(statusCode)
+                        .body(body)
+                        .build())
+                .build();
     }
 }
