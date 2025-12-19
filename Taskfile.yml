@@ -8,11 +8,9 @@ tasks:
       PORT: 8082
       SCHEDULED_TASKS_ENABLED: false
     cmds:
-      - mvn spring-boot:run &
-      - echo $! > .second-instance.pid
+      - mvn spring-boot:run
 
   run:second:stop:
     desc: Stop the second Core instance
     cmds:
-      - kill $(cat .second-instance.pid) 2>/dev/null || true
-      - rm -f .second-instance.pid
+      - lsof -ti:8082 | xargs kill 2>/dev/null || true
