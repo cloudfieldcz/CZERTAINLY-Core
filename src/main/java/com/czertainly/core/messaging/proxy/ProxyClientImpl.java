@@ -321,6 +321,52 @@ public class ProxyClientImpl implements ProxyClient {
         return timeout.toMillis() + "ms";
     }
 
+    @Override
+    public void sendFireAndForget(ConnectorDto connector, String path, String method, Object body) {
+        sendFireAndForget(connector, path, method, body, null);
+    }
+
+    @Override
+    public void sendFireAndForget(
+            ConnectorDto connector,
+            String path,
+            String method,
+            Object body,
+            String messageType) {
+
+        String proxyId = connector.getProxyId();
+
+        if (proxyId == null || proxyId.isBlank()) {
+            throw new IllegalArgumentException("Connector proxyId must be set to use ProxyClient");
+        }
+
+        // Use provided messageType or derive from method + path
+        String resolvedMessageType = (messageType != null && !messageType.isBlank())
+                ? messageType
+                : toMessageType(method, path);
+
+        log.debug("Sending fire-and-forget proxy request proxyId={} method={} path={} messageType={}",
+                proxyId, method, path, resolvedMessageType);
+
+        // Build the core message - no correlationId for fire-and-forget
+        CoreMessage message = CoreMessage.builder()
+                .messageType(resolvedMessageType)
+                .timestamp(Instant.now())
+                .connectorRequest(ConnectorRequest.builder()
+                        .connectorUrl(connector.getUrl())
+                        .method(method)
+                        .path(path)
+                        .connectorAuth(authConverter.convert(connector))
+                        .body(body)
+                        .build())
+                .build();
+
+        // Send without registering for response
+        producer.send(message, proxyId);
+
+        log.debug("Sent fire-and-forget proxy request proxyId={} messageType={}", proxyId, resolvedMessageType);
+    }
+
     /**
      * Convert HTTP method and path to dot-separated messageType format.
      * This format follows RabbitMQ topic exchange segment conventions.

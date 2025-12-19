@@ -600,6 +600,139 @@ class ProxyClientImplTest {
         verify(correlator).registerRequest(anyString(), eq(customTimeout));
     }
 
+    // ==================== Fire-and-Forget Tests ====================
+
+    @Test
+    void sendFireAndForget_sendsMessageWithoutCorrelation() {
+        ConnectorDto connector = createConnector("proxy-001");
+        connector.setUrl("http://connector.example.com");
+
+        proxyClient.sendFireAndForget(connector, "/v1/notifications", "POST", Map.of("event", "test"));
+
+        // Verify message was sent
+        ArgumentCaptor<CoreMessage> messageCaptor = ArgumentCaptor.forClass(CoreMessage.class);
+        verify(producer).send(messageCaptor.capture(), eq("proxy-001"));
+
+        var message = messageCaptor.getValue();
+        // Fire-and-forget should not have correlationId
+        assertThat(message.getCorrelationId()).isNull();
+        assertThat(message.getMessageType()).isEqualTo("POST.v1.notifications");
+        assertThat(message.getConnectorRequest()).isNotNull();
+        assertThat(message.getConnectorRequest().getMethod()).isEqualTo("POST");
+        assertThat(message.getConnectorRequest().getPath()).isEqualTo("/v1/notifications");
+
+        // Verify correlator was NOT called
+        verifyNoInteractions(correlator);
+    }
+
+    @Test
+    void sendFireAndForget_withCustomMessageType_usesProvidedType() {
+        ConnectorDto connector = createConnector("proxy-001");
+
+        proxyClient.sendFireAndForget(connector, "/v1/trigger", "POST", null, "discovery.trigger");
+
+        ArgumentCaptor<CoreMessage> messageCaptor = ArgumentCaptor.forClass(CoreMessage.class);
+        verify(producer).send(messageCaptor.capture(), eq("proxy-001"));
+
+        var message = messageCaptor.getValue();
+        assertThat(message.getMessageType()).isEqualTo("discovery.trigger");
+        assertThat(message.getCorrelationId()).isNull();
+    }
+
+    @Test
+    void sendFireAndForget_withNullMessageType_derivesFromMethodAndPath() {
+        ConnectorDto connector = createConnector("proxy-001");
+
+        proxyClient.sendFireAndForget(connector, "/v1/events/audit", "GET", null, null);
+
+        ArgumentCaptor<CoreMessage> messageCaptor = ArgumentCaptor.forClass(CoreMessage.class);
+        verify(producer).send(messageCaptor.capture(), eq("proxy-001"));
+
+        var message = messageCaptor.getValue();
+        assertThat(message.getMessageType()).isEqualTo("GET.v1.events.audit");
+    }
+
+    @Test
+    void sendFireAndForget_withBlankMessageType_derivesFromMethodAndPath() {
+        ConnectorDto connector = createConnector("proxy-001");
+
+        proxyClient.sendFireAndForget(connector, "/v1/events", "POST", null, "   ");
+
+        ArgumentCaptor<CoreMessage> messageCaptor = ArgumentCaptor.forClass(CoreMessage.class);
+        verify(producer).send(messageCaptor.capture(), eq("proxy-001"));
+
+        var message = messageCaptor.getValue();
+        assertThat(message.getMessageType()).isEqualTo("POST.v1.events");
+    }
+
+    @Test
+    void sendFireAndForget_withNullProxyId_throwsIllegalArgumentException() {
+        ConnectorDto connector = new ConnectorDto();
+        connector.setProxyId(null);
+
+        assertThatThrownBy(() -> proxyClient.sendFireAndForget(connector, "/v1/test", "POST", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("proxyId");
+    }
+
+    @Test
+    void sendFireAndForget_withEmptyProxyId_throwsIllegalArgumentException() {
+        ConnectorDto connector = new ConnectorDto();
+        connector.setProxyId("");
+
+        assertThatThrownBy(() -> proxyClient.sendFireAndForget(connector, "/v1/test", "POST", null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void sendFireAndForget_withNullBody_sendsMessageSuccessfully() {
+        ConnectorDto connector = createConnector("proxy-001");
+
+        proxyClient.sendFireAndForget(connector, "/v1/ping", "GET", null);
+
+        ArgumentCaptor<CoreMessage> messageCaptor = ArgumentCaptor.forClass(CoreMessage.class);
+        verify(producer).send(messageCaptor.capture(), eq("proxy-001"));
+
+        var message = messageCaptor.getValue();
+        assertThat(message.getConnectorRequest().getBody()).isNull();
+    }
+
+    @Test
+    void sendFireAndForget_includesConnectorAuth() {
+        ConnectorDto connector = createConnector("proxy-001");
+        connector.setAuthType(AuthType.BASIC);
+
+        ConnectorAuth expectedAuth = ConnectorAuth.builder()
+                .type("BASIC")
+                .attributes(Map.of("username", "admin"))
+                .build();
+        when(authConverter.convert(connector)).thenReturn(expectedAuth);
+
+        proxyClient.sendFireAndForget(connector, "/v1/test", "POST", null);
+
+        ArgumentCaptor<CoreMessage> messageCaptor = ArgumentCaptor.forClass(CoreMessage.class);
+        verify(producer).send(messageCaptor.capture(), eq("proxy-001"));
+
+        var message = messageCaptor.getValue();
+        assertThat(message.getConnectorRequest().getConnectorAuth()).isEqualTo(expectedAuth);
+    }
+
+    @Test
+    void sendFireAndForget_setsTimestamp() {
+        ConnectorDto connector = createConnector("proxy-001");
+
+        Instant before = Instant.now();
+        proxyClient.sendFireAndForget(connector, "/v1/test", "POST", null);
+        Instant after = Instant.now();
+
+        ArgumentCaptor<CoreMessage> messageCaptor = ArgumentCaptor.forClass(CoreMessage.class);
+        verify(producer).send(messageCaptor.capture(), eq("proxy-001"));
+
+        var message = messageCaptor.getValue();
+        assertThat(message.getTimestamp()).isAfterOrEqualTo(before);
+        assertThat(message.getTimestamp()).isBeforeOrEqualTo(after);
+    }
+
     // ==================== Helper Methods ====================
 
     private ConnectorDto createConnector(String proxyId) {
