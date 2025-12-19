@@ -21,7 +21,9 @@ public class NotificationJmsEndpointConfig extends AbstractJmsEndpointConfig<Not
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "notificationListener",
-                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS ? messagingProperties.exchange() : messagingProperties.queue().notification(),
+                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS
+                    ? messagingProperties.exchange()
+                    : messagingProperties.consumerDestination(messagingProperties.queue().notification()),
                 () -> messagingProperties.routingKey().notification(),
                 messagingConcurrencyProperties::notifications,
                 NotificationMessage.class

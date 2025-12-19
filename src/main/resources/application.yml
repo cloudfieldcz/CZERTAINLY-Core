@@ -141,6 +141,7 @@ spring:
         max-interval: 10000
         multiplier: 2
     exchange: ${BROKER_EXCHANGE:czertainly}
+    vhost: ${BROKER_VHOST:czertainly}
  # for rabbitMQ
     exchange-prefix: ${BROKER_EXCHANGE_PREFIX:/exchanges/}
     queue:

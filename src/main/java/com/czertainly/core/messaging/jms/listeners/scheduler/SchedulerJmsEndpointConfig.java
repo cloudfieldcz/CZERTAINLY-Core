@@ -20,7 +20,9 @@ public class SchedulerJmsEndpointConfig extends AbstractJmsEndpointConfig<Schedu
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "schedulerListener",
-                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS ? messagingProperties.exchange() : messagingProperties.queue().scheduler(),
+                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS
+                    ? messagingProperties.exchange()
+                    : messagingProperties.consumerDestination(messagingProperties.queue().scheduler()),
                 () -> messagingProperties.routingKey().scheduler(),
                 messagingConcurrencyProperties::scheduler,
                 SchedulerJobExecutionMessage.class

@@ -45,6 +45,9 @@ public abstract class AbstractJmsEndpointConfig<T> {
     public SimpleJmsListenerEndpoint listenerEndpointInternal(Supplier<String> endpointId, Supplier<String> destination,
                                                               Supplier<String> routingKey, Supplier<String> concurrency,
                                                               Class<T> messageClass) {
+        logger.debug("Configuring JMS listener endpoint: id={}, destination={}, routingKey={}, broker={}, vhost={}",
+            endpointId.get(), destination.get(), routingKey.get(), messagingProperties.name(), messagingProperties.vhost());
+
         SimpleJmsListenerEndpoint endpoint;
         if (messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS) {
             endpoint = new SimpleJmsListenerEndpoint() {
@@ -72,12 +75,14 @@ public abstract class AbstractJmsEndpointConfig<T> {
 
         endpoint.setDestination(destination.get());
         endpoint.setConcurrency(concurrency.get());
+
         endpoint.setMessageListener(jmsMessage -> {
+            logger.debug(">>> RECEIVED MESSAGE in endpoint: {}", endpointId.get());
             jmsRetryTemplate.execute(context -> {
                 context.setAttribute(JmsRetryListener.ENDPOINT_ID_ATTR, endpointId.get());
-
                 try {
                     String json = extractMessageText(jmsMessage, endpointId.get());
+                    logger.debug("Message JSON in endpoint {}: {}", endpointId.get(), json);
                     T message = objectMapper.readValue(json, messageClass);
                     listenerMessageProcessor.processMessage(message);
                 } catch (Exception e) {

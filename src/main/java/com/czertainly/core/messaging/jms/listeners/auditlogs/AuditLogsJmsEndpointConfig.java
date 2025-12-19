@@ -21,7 +21,9 @@ public class AuditLogsJmsEndpointConfig extends AbstractJmsEndpointConfig<AuditL
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "auditLogsListener",
-                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS ? messagingProperties.exchange() : messagingProperties.queue().auditLogs(),
+                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS
+                    ? messagingProperties.exchange()
+                    : messagingProperties.consumerDestination(messagingProperties.queue().auditLogs()),
                 () -> messagingProperties.routingKey().auditLogs(),
                 messagingConcurrencyProperties::auditLogs,
                 AuditLogMessage.class

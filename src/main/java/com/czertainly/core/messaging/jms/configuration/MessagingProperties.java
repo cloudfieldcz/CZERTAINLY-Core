@@ -13,7 +13,7 @@ public record MessagingProperties(
         @NotNull BrokerName name,
         @NotBlank String brokerUrl,
         @NotBlank String exchange,
-        String exchangePrefix,
+        String vhost,
         @NotBlank String user,
         @NotBlank String password,
         @Valid Listener listener,
@@ -26,6 +26,13 @@ public record MessagingProperties(
             return exchange();
         }
         return "/exchanges/" + exchange() + "/" + routingKey;
+    }
+
+    public String consumerDestination(String queueName) {
+        if (name == BrokerName.SERVICEBUS) {
+            return exchange();
+        }
+        return "/queues/" + queueName;
     }
 
     public String produceDestinationActions() {

@@ -2,6 +2,7 @@ package com.czertainly.core.messaging.jms.configuration;
 
 import jakarta.jms.ConnectionFactory;
 import org.apache.qpid.jms.JmsConnectionFactory;
+import org.slf4j.Logger;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,15 +12,32 @@ import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.support.converter.MappingJackson2MessageConverter;
 import org.springframework.jms.support.converter.MessageConverter;
 import org.springframework.jms.support.converter.MessageType;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import static org.slf4j.LoggerFactory.getLogger;
 
 @EnableJms
 @Configuration
 @EnableConfigurationProperties({MessagingProperties.class, MessagingConcurrencyProperties.class})
 public class JmsConfig {
+    private static final Logger logger = getLogger(JmsConfig.class);
 
     @Bean
     public ConnectionFactory connectionFactory(MessagingProperties props) {
-        JmsConnectionFactory factory = new JmsConnectionFactory(props.brokerUrl());
+        UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(props.brokerUrl());
+
+        // For RabbitMQ with AMQP 1.0, vhost is specified in the AMQP Open frame hostname field
+        // The hostname field must be "vhost:name" format according to RabbitMQ AMQP 1.0 docs
+        // We use amqp.vhost connection property to set this value
+        if (props.name() == MessagingProperties.BrokerName.RABBITMQ &&
+                props.vhost() != null && !props.vhost().isEmpty()) {
+            builder.queryParam("amqp.vhost", "vhost:" + props.vhost());
+        }
+        String brokerUrl = builder.build().toUriString();
+
+        logger.info("Connecting to broker: {} with vhost: {}", props.brokerUrl(), props.vhost());
+
+        JmsConnectionFactory factory = new JmsConnectionFactory(brokerUrl);
         factory.setUsername(props.user());
         factory.setPassword(props.password());
         factory.setForceSyncSend(true);
@@ -29,7 +47,8 @@ public class JmsConfig {
     @Bean
     public DefaultJmsListenerContainerFactory jmsListenerContainerFactory(
             ConnectionFactory connectionFactory,
-            MessageConverter messageConverter, MessagingProperties messagingProperties) {
+            MessageConverter messageConverter,
+            MessagingProperties messagingProperties) {
         DefaultJmsListenerContainerFactory factory = new DefaultJmsListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(messageConverter);
@@ -52,10 +71,13 @@ public class JmsConfig {
 
     @Bean
     public JmsTemplate jmsTemplate(ConnectionFactory connectionFactory,
-                                   MessageConverter messageConverter) {
+                                   MessageConverter messageConverter,
+                                   MessagingProperties messagingProperties) {
         JmsTemplate template = new JmsTemplate(connectionFactory);
         template.setMessageConverter(messageConverter);
-        template.setPubSubDomain(true);
+        if (messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS) {
+            template.setPubSubDomain(true);
+        }
         return template;
     }
 }

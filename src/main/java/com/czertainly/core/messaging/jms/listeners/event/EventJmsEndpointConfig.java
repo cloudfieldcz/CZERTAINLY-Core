@@ -21,7 +21,9 @@ public class EventJmsEndpointConfig extends AbstractJmsEndpointConfig<EventMessa
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "eventListener",
-                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS ? messagingProperties.exchange() : messagingProperties.queue().event(),
+                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS
+                    ? messagingProperties.exchange()
+                    : messagingProperties.consumerDestination(messagingProperties.queue().event()),
                 () -> messagingProperties.routingKey().event(),
                 messagingConcurrencyProperties::events,
                 EventMessage.class

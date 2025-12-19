@@ -84,6 +84,7 @@ Operations can be automated by the `Core`, but also can be performed manually by
 | `BROKER_USERNAME`                 | Message broker username                                               | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`               |
 | `BROKER_PASSWORD`                 | Message broker password                                               | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`               |
 | `BROKER_EXCHANGE`                 | Message broker exchange name                                          | ![](https://img.shields.io/badge/-NO-red.svg)      | `czertainly`        |
+| `BROKER_VHOST`                    | Message broker vhost (for RabitMQ only)                               | ![](https://img.shields.io/badge/-NO-red.svg)      | `czertainly`        |
 | `BROKER_QUEUE_AUDIT_LOGS`         | Queue name for audit logs (for RabitMQ only)                          | ![](https://img.shields.io/badge/-NO-red.svg)      | `core.audit-logs`   |
 | `BROKER_QUEUE_EVENT`              | Queue name for events (for RabitMQ only)                              | ![](https://img.shields.io/badge/-NO-red.svg)      | `core.event`        |
 | `BROKER_QUEUE_NOTIFICATION`       | Queue name for notifications (for RabitMQ only)                       | ![](https://img.shields.io/badge/-NO-red.svg)      | `core.notification` |
@@ -97,7 +98,6 @@ Operations can be automated by the `Core`, but also can be performed manually by
 | `BROKER_ROUTINGKEY_VALIDATION`    | Routing key for validation                                            | ![](https://img.shields.io/badge/-NO-red.svg)      | `validation`        |
 | `SETTINGS_CACHE_REFRESH_INTERVAL` | Interval of scheduled settings cache refresh from DB (in seconds)     | ![](https://img.shields.io/badge/-NO-red.svg)      | `30`                |)
 
-`RABBITMQ_VHOST` has been removed and can be added to queue name.
 
 ### OpenTelemetry settings
 

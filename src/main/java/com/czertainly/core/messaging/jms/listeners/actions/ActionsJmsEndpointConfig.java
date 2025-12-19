@@ -21,7 +21,9 @@ public class ActionsJmsEndpointConfig extends AbstractJmsEndpointConfig<ActionMe
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "actionsListener",
-                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS ? messagingProperties.exchange() : messagingProperties.queue().actions(),
+                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS
+                    ? messagingProperties.exchange()
+                    : messagingProperties.consumerDestination(messagingProperties.queue().actions()),
                 () -> messagingProperties.routingKey().actions(),
                 messagingConcurrencyProperties::actions,
                 ActionMessage.class
