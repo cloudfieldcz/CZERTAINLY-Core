@@ -82,6 +82,7 @@ spring:
     broker-url: amqp://localhost:5672
     user: guest
     password: guest
+    session-cache-size: 5
     queue:
       actions: core.actions
       audit-logs: core.audit-logs

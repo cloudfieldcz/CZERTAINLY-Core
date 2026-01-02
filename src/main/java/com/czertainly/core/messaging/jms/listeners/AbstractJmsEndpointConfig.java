@@ -7,12 +7,14 @@ import jakarta.jms.JMSException;
 import jakarta.jms.TextMessage;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jms.JmsException;
 import org.springframework.jms.config.SimpleJmsListenerEndpoint;
 import org.springframework.jms.listener.DefaultMessageListenerContainer;
 import org.springframework.jms.listener.MessageListenerContainer;
 import org.springframework.messaging.MessagingException;
 import org.springframework.retry.support.RetryTemplate;
 
+import java.io.IOException;
 import java.util.function.Supplier;
 
 import static org.slf4j.LoggerFactory.getLogger;
@@ -79,15 +81,26 @@ public abstract class AbstractJmsEndpointConfig<T> {
         endpoint.setMessageListener(jmsMessage -> {
             logger.debug(">>> RECEIVED MESSAGE in endpoint: {}", endpointId.get());
             jmsRetryTemplate.execute(context -> {
-                context.setAttribute(JmsRetryListener.ENDPOINT_ID_ATTR, endpointId.get());
                 try {
+                    context.setAttribute(JmsRetryListener.ENDPOINT_ID_ATTR, endpointId.get());
+                    context.setAttribute("messageId", jmsMessage.getJMSMessageID());
+                    context.setAttribute("messageClass", messageClass.getSimpleName());
+
                     String json = extractMessageText(jmsMessage, endpointId.get());
                     logger.debug("Message JSON in endpoint {}: {}", endpointId.get(), json);
                     T message = objectMapper.readValue(json, messageClass);
                     listenerMessageProcessor.processMessage(message);
-                } catch (Exception e) {
+                } catch (JmsException | IOException e) {
+                    // Retryable - network, broker issues
                     throw new MessagingException("Message processing failed in endpoint: " + endpointId.get(), e);
+                } catch (IllegalArgumentException e) {
+                    // Non-retryable - bad message format, validation
+                    logger.error("Invalid message in endpoint '{}', will not retry: {}", endpointId.get(), e.getMessage());
+                    throw e; // Don't wrap, don't retry
+                } catch (Exception e) {
+                    logger.error("Unexpected error in endpoint '{}'", endpointId.get(), e);
                 }
+
                 return null;
             });
         });
