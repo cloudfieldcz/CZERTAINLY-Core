@@ -1,5 +1,6 @@
 package com.czertainly.core.messaging.jms.configuration;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.jms.ConnectionFactory;
 import org.apache.qpid.jms.JmsConnectionFactory;
 import org.slf4j.Logger;
@@ -67,8 +68,9 @@ public class JmsConfig {
     }
 
     @Bean
-    public MessageConverter messageConverter() {
+    public MessageConverter messageConverter(ObjectMapper jacksonObjectMapper) {
         MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter();
+        converter.setObjectMapper(jacksonObjectMapper);
         converter.setTargetType(MessageType.TEXT);
         return converter;
     }
