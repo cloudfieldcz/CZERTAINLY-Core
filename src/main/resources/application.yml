@@ -131,6 +131,7 @@ spring:
     broker-url: ${BROKER_URL}
     user: ${BROKER_USERNAME}
     password: ${BROKER_PASSWORD}
+    session-cache-size: ${BROKER_SESSION_CACHE_SIZE:25}
     listener:
       recovery-interval: 5000
     producer:
@@ -143,7 +144,6 @@ spring:
     exchange: ${BROKER_EXCHANGE:czertainly}
     vhost: ${BROKER_VHOST:czertainly}
  # for rabbitMQ
-    exchange-prefix: ${BROKER_EXCHANGE_PREFIX:/exchanges/}
     queue:
       actions: ${BROKER_QUEUE_ACTIONS:core.actions}
       audit-logs: ${BROKER_QUEUE_AUDIT_LOGS:core.audit-logs}

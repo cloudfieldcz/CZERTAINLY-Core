@@ -12,6 +12,7 @@ import org.springframework.validation.annotation.Validated;
 public record MessagingProperties(
         @NotNull BrokerName name,
         @NotBlank String brokerUrl,
+        @Positive int sessionCacheSize,
         @NotBlank String exchange,
         String vhost,
         @NotBlank String user,
