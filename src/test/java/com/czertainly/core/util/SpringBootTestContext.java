@@ -9,7 +9,7 @@ import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.core.task.TaskExecutor;
 
 @TestConfiguration
-@Profile( "messaging-int-test | test")
+@Profile("test | messaging-int-test")
 class SpringBootTestContext {
     @MockBean
     OpaClient opaClient;
