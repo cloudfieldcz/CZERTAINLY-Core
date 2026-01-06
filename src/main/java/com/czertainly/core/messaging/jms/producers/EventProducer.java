@@ -17,7 +17,7 @@ public class EventProducer {
     private final MessagingProperties messagingProperties;
     private final RetryTemplate retryTemplate;
 
-    public void sendMessage(@NonNull final EventMessage eventMessage) {
+    public void produceMessage(@NonNull final EventMessage eventMessage) {
         Objects.requireNonNull(eventMessage, "Event message cannot be null");
 
         retryTemplate.execute(context -> {
@@ -30,9 +30,5 @@ public class EventProducer {
                     });
             return null;
         });
-    }
-
-    public void produceMessage(final EventMessage eventMessage) {
-        sendMessage(eventMessage);
     }
 }

@@ -127,7 +127,7 @@ spring:
         type:
           preferred_duration_jdbc_type: INTERVAL_SECOND
   messaging:
-    name: ${BROKER_NAME:SERVICEBUS}
+    broker-type: ${BROKER_TYPE:RABBITMQ} # possible values: RABBITMQ, SERVICEBUS
     broker-url: ${BROKER_URL}
     user: ${BROKER_USERNAME}
     password: ${BROKER_PASSWORD}
@@ -153,7 +153,7 @@ spring:
       validation: ${BROKER_QUEUE_VALIDATION:core.validation}
     routing-key:
       actions: ${BROKER_ROUTINGKEY_ACTIONS:actions}
-      audit-logs: ${BROKER_ROUTINGKEY_AUDIT_LOGS:auditlogs}
+      audit-logs: ${BROKER_ROUTINGKEY_AUDIT_LOGS:audit-logs}
       event: ${BROKER_ROUTINGKEY_EVENT:event}
       notification: ${BROKER_ROUTINGKEY_NOTIFICATION:notification}
       scheduler: ${BROKER_ROUTINGKEY_SCHEDULER:scheduler}

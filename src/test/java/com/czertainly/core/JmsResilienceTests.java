@@ -28,7 +28,7 @@ import java.io.IOException;
 
 @Tag("chaos")
 @SpringBootTest
-@ActiveProfiles({"toxiproxy-messaging-int-test"})
+@ActiveProfiles({"messaging-int-test"})
 @Testcontainers
 public abstract class JmsResilienceTests extends BaseSpringBootTest {
     protected static final Logger logger = LoggerFactory.getLogger(JmsResilienceTests.class);

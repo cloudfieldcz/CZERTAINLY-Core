@@ -20,7 +20,7 @@ public class ValidationJmsEndpointConfig extends AbstractJmsEndpointConfig<Valid
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
                 () -> "validationListener",
-                () -> messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS
+                () -> messagingProperties.brokerType() == MessagingProperties.BrokerType.SERVICEBUS
                     ? messagingProperties.exchange()
                     : messagingProperties.consumerDestination(messagingProperties.queue().validation()),
                 () -> messagingProperties.routingKey().validation(),

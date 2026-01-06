@@ -48,17 +48,16 @@ public abstract class AbstractJmsEndpointConfig<T> {
                                                               Supplier<String> routingKey, Supplier<String> concurrency,
                                                               Class<T> messageClass) {
         logger.debug("Configuring JMS listener endpoint: id={}, destination={}, routingKey={}, broker={}, vhost={}",
-            endpointId.get(), destination.get(), routingKey.get(), messagingProperties.name(), messagingProperties.vhost());
+            endpointId.get(), destination.get(), routingKey.get(), messagingProperties.brokerType(), messagingProperties.vhost());
 
         SimpleJmsListenerEndpoint endpoint;
-        if (messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS) {
+        if (messagingProperties.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
             endpoint = new SimpleJmsListenerEndpoint() {
                 @Override
                 public void setupListenerContainer(MessageListenerContainer listenerContainer) {
                     super.setupListenerContainer(listenerContainer);
                     if (listenerContainer instanceof DefaultMessageListenerContainer container) {
                         container.setSubscriptionShared(true);// Shared must be set to allow concurrency
-                        container.setClientId(endpointId.get());
                         container.setSubscriptionDurable(true);
                         container.setDurableSubscriptionName(routingKey.get());
                     }
@@ -70,7 +69,7 @@ public abstract class AbstractJmsEndpointConfig<T> {
 
         endpoint.setId(endpointId.get());
 
-        if (messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS) {
+        if (messagingProperties.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
             endpoint.setSubscription(routingKey.get());
             endpoint.setSelector(ROUTING_KEY + " = '" + routingKey.get() + "'");
         }

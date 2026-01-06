@@ -17,9 +17,7 @@ public class ValidationProducer {
     private final MessagingProperties messagingProperties;
     private final RetryTemplate retryTemplate;
 
-    public void sendMessage(@NonNull final ValidationMessage validationMessage) {
-        Objects.requireNonNull(validationMessage, "Validation message cannot be null");
-
+    private void sendMessage(final ValidationMessage validationMessage) {
         retryTemplate.execute(context -> {
             jmsTemplate.convertAndSend(
                     messagingProperties.produceDestinationValidation(),
@@ -32,7 +30,8 @@ public class ValidationProducer {
         });
     }
 
-    public void produceMessage(final ValidationMessage validationMessage) {
+    public void produceMessage(@NonNull final ValidationMessage validationMessage) {
+        Objects.requireNonNull(validationMessage, "Validation message cannot be null");
         sendMessage(validationMessage);
     }
 }

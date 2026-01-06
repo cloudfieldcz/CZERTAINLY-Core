@@ -10,7 +10,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "spring.messaging")
 @Validated
 public record MessagingProperties(
-        @NotNull BrokerName name,
+        @NotNull MessagingProperties.BrokerType brokerType,
         @NotBlank String brokerUrl,
         @Positive int sessionCacheSize,
         @NotBlank String exchange,
@@ -23,14 +23,14 @@ public record MessagingProperties(
         @NotNull @Valid RoutingKey routingKey
 ) {
     private String producerDestination(String routingKey) {
-        if (name == BrokerName.SERVICEBUS) {
+        if (brokerType == BrokerType.SERVICEBUS) {
             return exchange();
         }
         return "/exchanges/" + exchange() + "/" + routingKey;
     }
 
     public String consumerDestination(String queueName) {
-        if (name == BrokerName.SERVICEBUS) {
+        if (brokerType == BrokerType.SERVICEBUS) {
             return exchange();
         }
         return "/queues/" + queueName;
@@ -102,7 +102,7 @@ public record MessagingProperties(
         }
     }
 
-    public enum BrokerName {
+    public enum BrokerType {
         RABBITMQ,
         SERVICEBUS
     }

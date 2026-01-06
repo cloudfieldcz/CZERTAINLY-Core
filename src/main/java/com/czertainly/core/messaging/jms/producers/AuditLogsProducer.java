@@ -17,7 +17,7 @@ public class AuditLogsProducer {
     private final MessagingProperties messagingProperties;
     private final RetryTemplate retryTemplate;
 
-    public void sendMessage(@NonNull final AuditLogMessage auditLogMessage) {
+    public void produceMessage(@NonNull final AuditLogMessage auditLogMessage) {
         Objects.requireNonNull(auditLogMessage, "Audit log message cannot be null");
 
         retryTemplate.execute(context -> {
@@ -30,9 +30,5 @@ public class AuditLogsProducer {
                     });
             return null;
         });
-    }
-
-    public void produceMessage(final AuditLogMessage auditLogMessage) {
-        sendMessage(auditLogMessage);
     }
 }

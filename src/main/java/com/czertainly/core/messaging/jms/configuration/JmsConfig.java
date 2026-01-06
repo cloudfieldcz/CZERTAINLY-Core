@@ -31,7 +31,7 @@ public class JmsConfig {
         // For RabbitMQ with AMQP 1.0, vhost is specified in the AMQP Open frame hostname field
         // The hostname field must be "vhost:name" format according to RabbitMQ AMQP 1.0 docs
         // We use amqp.vhost connection property to set this value
-        if (props.name() == MessagingProperties.BrokerName.RABBITMQ &&
+        if (props.brokerType() == MessagingProperties.BrokerType.RABBITMQ &&
                 props.vhost() != null && !props.vhost().isEmpty()) {
             builder.queryParam("amqp.vhost", "vhost:" + props.vhost());
         }
@@ -57,7 +57,7 @@ public class JmsConfig {
         DefaultJmsListenerContainerFactory factory = new DefaultJmsListenerContainerFactory();
         factory.setConnectionFactory(connectionFactory);
         factory.setMessageConverter(messageConverter);
-        if (messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS) {
+        if (messagingProperties.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
             factory.setPubSubDomain(true);
             factory.setSubscriptionDurable(true);
         }
@@ -81,7 +81,7 @@ public class JmsConfig {
                                    MessagingProperties messagingProperties) {
         JmsTemplate template = new JmsTemplate(connectionFactory);
         template.setMessageConverter(messageConverter);
-        if (messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS) {
+        if (messagingProperties.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
             template.setPubSubDomain(true);
         }
         return template;

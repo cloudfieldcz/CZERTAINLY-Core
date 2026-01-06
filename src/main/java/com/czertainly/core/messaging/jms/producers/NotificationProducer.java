@@ -26,9 +26,7 @@ public class NotificationProducer {
     private final MessagingProperties messagingProperties;
     private final RetryTemplate retryTemplate;
 
-    public void sendMessage(@NonNull final NotificationMessage notificationMessage) {
-        Objects.requireNonNull(notificationMessage, "Notification message cannot be null");
-
+    private void sendMessage(final NotificationMessage notificationMessage) {
         retryTemplate.execute(context -> {
             jmsTemplate.convertAndSend(
                     messagingProperties.produceDestinationNotifications(),
@@ -41,7 +39,8 @@ public class NotificationProducer {
         });
     }
 
-    public void produceMessage(final NotificationMessage notificationMessage) {
+    public void produceMessage(@NonNull final NotificationMessage notificationMessage) {
+        Objects.requireNonNull(notificationMessage, "Notification message cannot be null");
         if ((notificationMessage.getNotificationProfileUuids() == null || notificationMessage.getNotificationProfileUuids().isEmpty()) && (notificationMessage.getRecipients() == null || notificationMessage.getRecipients().isEmpty())) {
             logger.warn("Recipients for notification of event {} is empty. Message: {}", notificationMessage.getEvent().getLabel(), notificationMessage);
         } else {

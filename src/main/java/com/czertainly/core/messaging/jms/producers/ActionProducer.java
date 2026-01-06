@@ -17,7 +17,7 @@ public class ActionProducer {
     private final MessagingProperties messagingProperties;
     private final RetryTemplate retryTemplate;
 
-    public void sendMessage(@NonNull final ActionMessage actionMessage) {
+    public void produceMessage(@NonNull final ActionMessage actionMessage) {
         Objects.requireNonNull(actionMessage, "Action message cannot be null");
 
         retryTemplate.execute(context -> {
@@ -30,9 +30,5 @@ public class ActionProducer {
                     });
             return null;
         });
-    }
-
-    public void produceMessage(final ActionMessage actionMessage) {
-        sendMessage(actionMessage);
     }
 }

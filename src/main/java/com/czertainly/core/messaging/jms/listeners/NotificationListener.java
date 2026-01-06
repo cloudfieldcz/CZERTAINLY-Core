@@ -78,7 +78,7 @@ public class NotificationListener implements MessageProcessor<NotificationMessag
         if (message.getNotificationProfileUuids() == null) {
             try {
                 sendInternalNotifications(message.getRecipients(), getInternalNotificationData(message), message.getResource(), message.getObjectUuid());
-            } catch (ValidationException e) {
+            } catch (Exception e) {
                 logger.error("Error in internal notification: {}", e.toString());
             }
         } else {
@@ -96,19 +96,24 @@ public class NotificationListener implements MessageProcessor<NotificationMessag
     }
 
     private void sendByNotificationProfile(UUID notificationProfileUuid, NotificationMessage message) throws NotFoundException {
-        NotificationProfileVersion notificationProfileVersion = notificationProfileVersionRepository.findTopByNotificationProfileUuidOrderByVersionDesc(notificationProfileUuid).orElseThrow(() -> new NotFoundException(NotificationProfile.class, notificationProfileUuid));
+        NotificationProfileVersion notificationProfileVersion = null;
         PendingNotification pendingNotification = null;
         if (message.getEvent().isMonitoring()) {
             pendingNotification = pendingNotificationRepository.findByNotificationProfileUuidAndResourceAndObjectUuidAndEvent(notificationProfileUuid, message.getResource(), message.getObjectUuid(), message.getEvent());
             if (pendingNotification == null) {
+                notificationProfileVersion = notificationProfileVersionRepository.findTopByNotificationProfileUuidOrderByVersionDesc(notificationProfileUuid).orElseThrow(() -> new NotFoundException(NotificationProfile.class, notificationProfileUuid));
                 pendingNotification = getNewPendingNotification(message, notificationProfileVersion, pendingNotification);
             } else {
                 notificationProfileVersion = notificationProfileVersionRepository.findByNotificationProfileUuidAndVersion(notificationProfileUuid, pendingNotification.getVersion()).orElseThrow(() -> new NotFoundException(NotificationProfile.class, notificationProfileUuid));
             }
         }
 
+        if (notificationProfileVersion == null) {
+            notificationProfileVersion = notificationProfileVersionRepository.findTopByNotificationProfileUuidOrderByVersionDesc(notificationProfileUuid).orElseThrow(() -> new NotFoundException(NotificationProfile.class, notificationProfileUuid));
+        }
+
         if (!proceedWithNotifying(notificationProfileVersion, pendingNotification)) {
-            logger.debug("Notification suppressed by configuration of notification profile {} for event {}. Notification sent last time at {} and was repeated {} times.", notificationProfileVersion.getNotificationProfile().getName(), message.getEvent(), pendingNotification.getLastSentAt(), pendingNotification.getRepetitions());
+            logger.debug("Notification suppressed for {} with UUID {} by configuration of notification profile {} for event {}. Notification sent last time at {} and was repeated {} times.", pendingNotification.getResource().getLabel(), pendingNotification.getObjectUuid(), notificationProfileVersion.getNotificationProfile().getName(), message.getEvent(), pendingNotification.getLastSentAt(), pendingNotification.getRepetitions());
             return;
         }
 
@@ -166,7 +171,7 @@ public class NotificationListener implements MessageProcessor<NotificationMessag
         }
 
         OffsetDateTime now = OffsetDateTime.now();
-        return (notificationProfileVersion.getFrequency() == null || pendingNotification.getLastSentAt() == null || Duration.between(pendingNotification.getLastSentAt(), now).getNano() > notificationProfileVersion.getFrequency().getNano())
+        return (notificationProfileVersion.getFrequency() == null || pendingNotification.getLastSentAt() == null || Duration.between(pendingNotification.getLastSentAt(), now).compareTo(notificationProfileVersion.getFrequency()) > 0)
                 && (notificationProfileVersion.getRepetitions() == null || pendingNotification.getRepetitions() < notificationProfileVersion.getRepetitions());
     }
 
@@ -187,7 +192,8 @@ public class NotificationListener implements MessageProcessor<NotificationMessag
     private List<NotificationRecipient> getDefaultRecipients(ResourceEvent event, Object data, Resource resource, UUID objectUuid) {
         List<NotificationRecipient> recipients = new ArrayList<>();
         switch (event) {
-            case CERTIFICATE_STATUS_CHANGED, CERTIFICATE_ACTION_PERFORMED, CERTIFICATE_EXPIRING, CERTIFICATE_NOT_COMPLIANT -> {
+            case CERTIFICATE_STATUS_CHANGED, CERTIFICATE_ACTION_PERFORMED, CERTIFICATE_EXPIRING,
+                 CERTIFICATE_NOT_COMPLIANT -> {
                 NameAndUuidDto ownerInfo = resourceObjectAssociationService.getOwner(resource, objectUuid);
                 if (ownerInfo != null) {
                     recipients.add(new NotificationRecipient(RecipientType.USER, UUID.fromString(ownerInfo.getUuid())));
@@ -411,7 +417,7 @@ public class NotificationListener implements MessageProcessor<NotificationMessag
             }
 
             case CERTIFICATE_EXPIRING -> {
-                CertificateExpiringEventData data = (CertificateExpiringEventData)  eventData;
+                CertificateExpiringEventData data = (CertificateExpiringEventData) eventData;
                 yield new InternalNotificationEventData("Certificate identified as '%s' with serial number '%s' issued by '%s' is expiring on %s"
                         .formatted(data.getSubjectDn(), data.getSerialNumber(), data.getIssuerDn(), data.getExpiresAt()), null);
             }

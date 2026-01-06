@@ -18,7 +18,7 @@ import org.springframework.jms.core.JmsTemplate;
  * The {@link JmsTemplate} returned by this configuration is a mocked instance created using {@link Mockito}.
  */
 @Configuration
-@Profile("test & !(toxiproxy-messaging-int-test | messaging-int-test)")
+@Profile("test & !messaging-int-test")
 public class TestJmsTemplateMockConfig {
 
     @Bean

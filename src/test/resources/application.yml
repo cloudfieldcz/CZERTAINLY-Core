@@ -61,7 +61,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: create
+      ddl-auto: create-drop
     properties:
       hibernate:
         type:
@@ -78,7 +78,7 @@ spring:
     username: guest
     password: guest
   messaging:
-    name: RABBITMQ
+    broker-type: RABBITMQ
     broker-url: amqp://localhost:5672
     user: guest
     password: guest

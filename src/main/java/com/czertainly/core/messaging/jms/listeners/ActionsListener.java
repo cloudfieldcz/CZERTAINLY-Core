@@ -19,7 +19,6 @@ import com.czertainly.core.service.ApprovalService;
 import com.czertainly.core.service.v2.ClientOperationService;
 import com.czertainly.core.util.AuthHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +31,6 @@ import java.util.Objects;
 import java.util.Optional;
 
 @Component
-@Transactional
 public class ActionsListener implements MessageProcessor<ActionMessage> {
 
     private static final Logger logger = LoggerFactory.getLogger(ActionsListener.class);
