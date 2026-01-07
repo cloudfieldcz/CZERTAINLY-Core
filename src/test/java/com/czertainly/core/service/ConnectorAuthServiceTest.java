@@ -24,7 +24,11 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 
-import static com.czertainly.api.clients.BaseApiClient.*;
+import static com.czertainly.api.clients.BaseApiClient.ATTRIBUTE_KEYSTORE;
+import static com.czertainly.api.clients.BaseApiClient.ATTRIBUTE_KEYSTORE_PASSWORD;
+import static com.czertainly.api.clients.BaseApiClient.ATTRIBUTE_KEYSTORE_TYPE;
+import static com.czertainly.api.clients.BaseApiClient.ATTRIBUTE_PASSWORD;
+import static com.czertainly.api.clients.BaseApiClient.ATTRIBUTE_USERNAME;
 import static com.czertainly.core.util.AttributeDefinitionUtils.createAttributes;
 
 @SpringBootTest
