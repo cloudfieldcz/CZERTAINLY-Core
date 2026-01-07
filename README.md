@@ -58,6 +58,11 @@ Operations can be automated by the `Core`, but also can be performed manually by
 - SCEP (with optional Intune support)
 - CMP
 
+## Message brokers support
+Application now supports two types of message brokers:
+- RabbitMQ (uses CachingConnectionFactory, BROKER_SESSION_CACHE_SIZE can be specified)
+- Azure Service Bus (uses JmsConnectionFactory)
+
 ## Docker container
 
 `Core` is provided as a Docker container. Use the `czertainly/czertainly-core:tagname` to pull the required image from the repository. It can be configured using the following environment variables:
@@ -85,7 +90,7 @@ Operations can be automated by the `Core`, but also can be performed manually by
 | `BROKER_PASSWORD`                 | Message broker password                                               | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`               |
 | `BROKER_EXCHANGE`                 | Message broker exchange name                                          | ![](https://img.shields.io/badge/-NO-red.svg) | `czertainly`        |
 | `BROKER_VHOST`                    | Message broker vhost (for RabbitMQ only)                              | ![](https://img.shields.io/badge/-NO-red.svg) | `czertainly`        |
-| `BROKER_SESSION_CACHE_SIZE`       | ConnectionCachingFactory session cache size                           | ![](https://img.shields.io/badge/-NO-red.svg) | `25`                |
+| `BROKER_SESSION_CACHE_SIZE`       | ConnectionCachingFactory session cache size (only for RabbitMQ)       | ![](https://img.shields.io/badge/-NO-red.svg) | `25`                |
 | `BROKER_QUEUE_AUDIT_LOGS`         | Queue name for audit logs (for RabbitMQ only)                         | ![](https://img.shields.io/badge/-NO-red.svg) | `core.audit-logs`   |
 | `BROKER_QUEUE_EVENT`              | Queue name for events (for RabbitMQ only)                             | ![](https://img.shields.io/badge/-NO-red.svg) | `core.event`        |
 | `BROKER_QUEUE_NOTIFICATION`       | Queue name for notifications (for RabbitMQ only)                      | ![](https://img.shields.io/badge/-NO-red.svg) | `core.notification` |

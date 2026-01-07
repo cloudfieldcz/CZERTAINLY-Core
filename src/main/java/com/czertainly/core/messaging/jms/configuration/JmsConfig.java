@@ -43,9 +43,15 @@ public class JmsConfig {
         factory.setUsername(props.user());
         factory.setPassword(props.password());
         factory.setForceSyncSend(true);
+        if (props.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
+            return factory;
+        }
 
+        // caching connection favtory for non-ServiceBus (RabbitMQ)
         CachingConnectionFactory cachingConnectionFactory = new CachingConnectionFactory(factory);
         cachingConnectionFactory.setSessionCacheSize(props.sessionCacheSize());
+        cachingConnectionFactory.setReconnectOnException(true);
+
         return cachingConnectionFactory;
     }
 
