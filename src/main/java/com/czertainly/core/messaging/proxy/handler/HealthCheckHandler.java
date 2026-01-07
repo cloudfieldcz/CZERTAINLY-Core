@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class HealthCheckHandler implements MessageTypeResponseHandler {
 
-    private static final String MESSAGE_TYPE = "health.check";
+    private static final String MESSAGE_TYPE = "health.*";
 
     @Override
     public String getMessageType() {

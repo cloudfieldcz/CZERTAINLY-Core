@@ -1,5 +1,7 @@
 package com.czertainly.core.messaging.proxy;
 
+import com.czertainly.api.clients.mq.AttributeApiClient;
+import com.czertainly.api.clients.mq.ConnectorApiClient;
 import com.czertainly.api.clients.mq.HealthApiClient;
 import com.czertainly.api.clients.mq.ProxyClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -21,5 +23,23 @@ public class ProxyClientConfig {
     @Bean
     public HealthApiClient mqHealthApiClient(ProxyClient proxyClient) {
         return new HealthApiClient(proxyClient);
+    }
+
+    /**
+     * Create MQ-based ConnectorApiClient bean.
+     * This bean is used when connector has proxyId set to list supported functions.
+     */
+    @Bean
+    public ConnectorApiClient mqConnectorApiClient(ProxyClient proxyClient) {
+        return new ConnectorApiClient(proxyClient);
+    }
+
+    /**
+     * Create MQ-based AttributeApiClient bean.
+     * This bean is used when connector has proxyId set to manage attributes.
+     */
+    @Bean
+    public AttributeApiClient mqAttributeApiClient(ProxyClient proxyClient) {
+        return new AttributeApiClient(proxyClient);
     }
 }

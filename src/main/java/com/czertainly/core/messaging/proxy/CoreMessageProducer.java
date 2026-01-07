@@ -75,7 +75,7 @@ public class CoreMessageProducer {
         }
 
         // For RabbitMQ, include exchange prefix if configured
-        String exchangePrefix = messagingProperties.exchangePrefix();
+        String exchangePrefix = "/exchanges/";
         if (exchangePrefix != null) {
             return exchangePrefix + proxyProperties.exchange();
         }
