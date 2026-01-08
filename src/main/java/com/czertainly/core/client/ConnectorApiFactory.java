@@ -1,12 +1,13 @@
 package com.czertainly.core.client;
 
 import com.czertainly.api.clients.AttributeApiClient;
-import com.czertainly.api.clients.AttributeSyncApiClient;
+import com.czertainly.api.interfaces.client.AttributeSyncApiClient;
 import com.czertainly.api.clients.ConnectorApiClient;
-import com.czertainly.api.clients.ConnectorSyncApiClient;
+import com.czertainly.api.interfaces.client.ConnectorSyncApiClient;
 import com.czertainly.api.clients.HealthApiClient;
-import com.czertainly.api.clients.HealthSyncApiClient;
+import com.czertainly.api.interfaces.client.HealthSyncApiClient;
 import com.czertainly.api.model.core.connector.ConnectorDto;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,6 +69,7 @@ public class ConnectorApiFactory {
      * @return MQ client if connector has proxyId and MQ client is available, otherwise REST client
      */
     public AttributeSyncApiClient getAttributeApiClient(ConnectorDto connector) {
+        Objects.requireNonNull(connector, "connector must not be null");
         if (shouldUseMq(connector) && mqAttributeApiClient != null) {
             logger.debug("Using MQ attribute client for connector {} via proxy {}",
                     connector.getName(), connector.getProxyId());
@@ -83,6 +85,7 @@ public class ConnectorApiFactory {
      * @return MQ client if connector has proxyId and MQ client is available, otherwise REST client
      */
     public ConnectorSyncApiClient getConnectorApiClient(ConnectorDto connector) {
+        Objects.requireNonNull(connector, "connector must not be null");
         if (shouldUseMq(connector) && mqConnectorApiClient != null) {
             logger.debug("Using MQ connector client for connector {} via proxy {}",
                     connector.getName(), connector.getProxyId());
@@ -98,6 +101,7 @@ public class ConnectorApiFactory {
      * @return MQ client if connector has proxyId and MQ client is available, otherwise REST client
      */
     public HealthSyncApiClient getHealthApiClient(ConnectorDto connector) {
+        Objects.requireNonNull(connector, "connector must not be null");
         if (shouldUseMq(connector) && mqHealthApiClient != null) {
             logger.debug("Using MQ health client for connector {} via proxy {}",
                     connector.getName(), connector.getProxyId());

@@ -119,6 +119,7 @@ public class MessageTypeHandlerRegistry {
     /**
      * Find a handler matching a pattern using RabbitMQ topic exchange semantics.
      * Uses most-specific-wins strategy based on pattern specificity score.
+     * When scores are equal, uses lexicographic comparison for deterministic selection.
      *
      * @param messageType The messageType to match
      * @return The most specific matching handler, or null if none match
@@ -126,14 +127,17 @@ public class MessageTypeHandlerRegistry {
     private MessageTypeResponseHandler findPatternMatch(String messageType) {
         MessageTypeResponseHandler bestMatch = null;
         int bestScore = -1;
+        String bestPattern = null;
 
         for (Map.Entry<String, MessageTypeResponseHandler> entry : handlers.entrySet()) {
             String pattern = entry.getKey();
             if (matches(pattern, messageType)) {
                 int score = calculateSpecificity(pattern);
-                if (score > bestScore) {
+                // Use lexicographic comparison as tie-breaker for deterministic selection
+                if (score > bestScore || (score == bestScore && bestPattern != null && pattern.compareTo(bestPattern) < 0)) {
                     bestScore = score;
                     bestMatch = entry.getValue();
+                    bestPattern = pattern;
                 }
             }
         }

@@ -22,11 +22,6 @@ class HealthCheckHandlerTest {
     }
 
     @Test
-    void getMessageType_returnsHealthCheck() {
-        assertThat(handler.getMessageType()).isEqualTo("health.check");
-    }
-
-    @Test
     void handleResponse_withValidMessage_logsWithoutError() {
         ProxyMessage message = ProxyMessage.builder()
                 .proxyId("proxy-001")

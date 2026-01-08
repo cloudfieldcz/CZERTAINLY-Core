@@ -329,7 +329,7 @@ class ProxyMessageCorrelatorTest {
     @DisplayName("Concurrent registrations and completions from multiple threads are thread-safe")
     void concurrentRegistrationsAndCompletions_areThreadSafe() throws Exception {
         int threadCount = 10;
-        int requestsPerThread = 50;
+        int requestsPerThread = 5; // Total 50 requests, well under capacity of 100
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch doneLatch = new CountDownLatch(threadCount);
@@ -351,8 +351,8 @@ class ProxyMessageCorrelatorTest {
                             correlator.completeRequest(createSuccessMessage(correlationId));
                         }
                     }
-                } catch (Exception e) {
-                    e.printStackTrace();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 } finally {
                     doneLatch.countDown();
                 }
@@ -364,11 +364,10 @@ class ProxyMessageCorrelatorTest {
         doneLatch.await();
         executor.shutdown();
 
-        // Verify all futures were registered (the list grows as futures are added)
-        assertThat(allFutures).hasSizeLessThanOrEqualTo(threadCount * requestsPerThread);
-        assertThat(allFutures).isNotEmpty();
+        // Verify all futures were registered
+        assertThat(allFutures).hasSize(threadCount * requestsPerThread);
 
-        // Verify pending count is consistent (non-negative and within bounds)
+        // Verify pending count is consistent (half were completed immediately)
         int pendingCount = correlator.getPendingCount();
         assertThat(pendingCount).isBetween(0, threadCount * requestsPerThread);
     }

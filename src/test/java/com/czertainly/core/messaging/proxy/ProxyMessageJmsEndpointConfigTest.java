@@ -55,7 +55,7 @@ class ProxyMessageJmsEndpointConfigTest {
 
     @Test
     void listenerEndpoint_withServiceBus_configuresSubscriptionAndSelector() {
-        when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.SERVICEBUS);
 
         SimpleJmsListenerEndpoint endpoint = config.listenerEndpoint();
 
@@ -67,7 +67,7 @@ class ProxyMessageJmsEndpointConfigTest {
 
     @Test
     void listenerEndpoint_withRabbitMQ_noSubscriptionOrSelector() {
-        when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.RABBITMQ);
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.RABBITMQ);
 
         SimpleJmsListenerEndpoint endpoint = config.listenerEndpoint();
 

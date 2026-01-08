@@ -2,6 +2,7 @@ package com.czertainly.core.messaging.proxy;
 
 import com.czertainly.api.clients.mq.model.CoreMessage;
 import com.czertainly.core.messaging.jms.configuration.MessagingProperties;
+import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.retry.support.RetryTemplate;
@@ -39,6 +40,11 @@ public class CoreMessageProducer {
      * @param proxyId The target proxy instance ID
      */
     public void send(CoreMessage message, String proxyId) {
+        Objects.requireNonNull(message, "message must not be null");
+        if (proxyId == null || proxyId.isBlank()) {
+            throw new IllegalArgumentException("proxyId must not be null or blank");
+        }
+
         String routingKey = proxyProperties.getRequestRoutingKey(proxyId);
         String destination = getDestination();
 
@@ -70,7 +76,7 @@ public class CoreMessageProducer {
      * For RabbitMQ, we prefix with the exchange if configured.
      */
     private String getDestination() {
-        if (messagingProperties.name() == MessagingProperties.BrokerName.SERVICEBUS) {
+        if (messagingProperties.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
             return proxyProperties.exchange();
         }
 

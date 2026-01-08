@@ -193,7 +193,7 @@ proxy:
     # Channel name for broadcasting proxy responses across Core instances
     channel: ${PROXY_REDIS_CHANNEL:proxy:responses}
     # Enable Redis-based response distribution (required for multiple Core instances)
-    enabled: ${PROXY_REDIS_ENABLED:true}
+    enabled: ${PROXY_REDIS_ENABLED:false}
 
 validation:
   crl:

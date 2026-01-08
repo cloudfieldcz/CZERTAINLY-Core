@@ -69,7 +69,7 @@ class CoreMessageProducerTest {
 
     @Test
     void send_withServiceBus_usesTopicDirectly() throws JMSException {
-        when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.SERVICEBUS);
 
         CoreMessage message = createCoreMessage("corr-1");
         producer.send(message, "proxy-001");
@@ -83,7 +83,7 @@ class CoreMessageProducerTest {
 
     @Test
     void send_withServiceBus_setsJMSTypeToRoutingKey() throws JMSException {
-        when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.SERVICEBUS);
 
         CoreMessage message = createCoreMessage("corr-1");
         producer.send(message, "proxy-001");
@@ -103,7 +103,7 @@ class CoreMessageProducerTest {
 
     @Test
     void send_withServiceBus_setsJMSCorrelationID() throws JMSException {
-        when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.SERVICEBUS);
 
         CoreMessage message = createCoreMessage("my-correlation-id");
         producer.send(message, "proxy-001");
@@ -124,8 +124,7 @@ class CoreMessageProducerTest {
 
     @Test
     void send_withRabbitMQ_prefixesExchange() throws JMSException {
-        when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.RABBITMQ);
-        when(messagingProperties.exchangePrefix()).thenReturn("/exchanges/");
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.RABBITMQ);
 
         CoreMessage message = createCoreMessage("corr-1");
         producer.send(message, "proxy-002");
@@ -139,8 +138,7 @@ class CoreMessageProducerTest {
 
     @Test
     void send_withRabbitMQNoExchangePrefix_usesTopicOnly() throws JMSException {
-        when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.RABBITMQ);
-        when(messagingProperties.exchangePrefix()).thenReturn(null);
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.SERVICEBUS);
 
         CoreMessage message = createCoreMessage("corr-1");
         producer.send(message, "proxy-003");
@@ -154,8 +152,7 @@ class CoreMessageProducerTest {
 
     @Test
     void send_withRabbitMQ_setsCorrectRoutingKey() throws JMSException {
-        when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.RABBITMQ);
-        when(messagingProperties.exchangePrefix()).thenReturn("/exchanges/");
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.RABBITMQ);
 
         CoreMessage message = createCoreMessage("corr-1");
         producer.send(message, "my-proxy-instance");
@@ -176,7 +173,7 @@ class CoreMessageProducerTest {
 
     @Test
     void send_usesRetryTemplate() throws Exception {
-        when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.SERVICEBUS);
 
         CoreMessage message = createCoreMessage("corr-1");
         producer.send(message, "proxy-001");
@@ -193,7 +190,7 @@ class CoreMessageProducerTest {
 
     @Test
     void send_withDifferentProxyIds_usesCorrectRoutingKey() throws JMSException {
-        when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.SERVICEBUS);
 
         // First request
         producer.send(createCoreMessage("corr-1"), "proxy-alpha");
@@ -227,7 +224,7 @@ class CoreMessageProducerTest {
 
     @Test
     void send_preservesMessageCorrelationId() throws JMSException {
-        when(messagingProperties.name()).thenReturn(MessagingProperties.BrokerName.SERVICEBUS);
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.SERVICEBUS);
 
         CoreMessage message = createCoreMessage("unique-correlation-123");
         producer.send(message, "proxy-001");

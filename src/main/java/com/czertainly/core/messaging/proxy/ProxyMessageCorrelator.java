@@ -62,7 +62,9 @@ public class ProxyMessageCorrelator {
             throw new IllegalStateException("ProxyMessageCorrelator is shutting down");
         }
 
-        // Check capacity
+        // Check capacity (soft limit - may briefly exceed under high concurrency
+        // due to check-then-act race; this is acceptable as the limit is a safeguard
+        // against unbounded growth, not a strict security boundary)
         if (pendingRequests.size() >= proxyProperties.maxPendingRequests()) {
             throw new IllegalStateException(
                     "Too many pending proxy requests. Max: " + proxyProperties.maxPendingRequests());
