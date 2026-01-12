@@ -161,7 +161,12 @@ class ProxyClientImplTest {
                 connector, "/v1/items/{id}/{action}", "POST", pathVars, null, String.class);
 
         assertThat(result).isNotNull();
-        verify(producer).send(any(), eq("proxy-001"));
+
+        ArgumentCaptor<CoreMessage> messageCaptor = ArgumentCaptor.forClass(CoreMessage.class);
+        verify(producer).send(messageCaptor.capture(), eq("proxy-001"));
+
+        CoreMessage message = messageCaptor.getValue();
+        assertThat(message.getConnectorRequest().getPath()).isEqualTo("/v1/items/123/activate");
     }
 
     @Test
@@ -195,10 +200,10 @@ class ProxyClientImplTest {
 
         proxyClient.sendRequestAsync(connector, "/v1/test", "GET", null, String.class);
 
-        // Verify registration happens
-        verify(correlator).registerRequest(anyString(), any(Duration.class));
-        // Then send
-        verify(producer).send(any(), eq("proxy-001"));
+        // Verify registration happens BEFORE send
+        var inOrder = inOrder(correlator, producer);
+        inOrder.verify(correlator).registerRequest(anyString(), any(Duration.class));
+        inOrder.verify(producer).send(any(), eq("proxy-001"));
     }
 
     @Test

@@ -43,6 +43,10 @@ public class RedisResponseDistributor {
      * @param message The proxy message to publish
      */
     public void publishResponse(ProxyMessage message) {
+        if (message == null) {
+            log.warn("Attempted to publish null proxy message to Redis, ignoring");
+            return;
+        }
         try {
             String json = objectMapper.writeValueAsString(message);
             redisTemplate.convertAndSend(channel, json);

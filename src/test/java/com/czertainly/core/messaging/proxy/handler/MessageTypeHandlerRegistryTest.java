@@ -532,7 +532,7 @@ class MessageTypeHandlerRegistryTest {
     // ==================== Handler Error Tests ====================
 
     @Test
-    void dispatch_onHandlerException_returnsFalseAndLogsError() {
+    void dispatch_onHandlerException_returnsFalse() {
         MessageTypeResponseHandler failingHandler = mock(MessageTypeResponseHandler.class);
         when(failingHandler.getMessageType()).thenReturn("failing.type");
         doThrow(new RuntimeException("Handler failed")).when(failingHandler).handleResponse(any());

@@ -208,6 +208,19 @@ public class ProxyMessageCorrelator {
     }
 
     /**
+     * Clear all pending requests by cancelling their futures.
+     * Primarily intended for testing to ensure clean state between tests.
+     */
+    public void clearPendingRequests() {
+        pendingRequests.forEach((id, pending) -> {
+            pending.timeoutTask().cancel(false);
+            pending.future().cancel(true);
+        });
+        pendingRequests.clear();
+        log.debug("Cleared all pending requests");
+    }
+
+    /**
      * Cleanup on shutdown.
      * Cancels all pending requests and shuts down the timeout scheduler.
      */

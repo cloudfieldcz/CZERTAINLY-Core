@@ -1,7 +1,5 @@
 package com.czertainly.core.service.impl;
 
-import com.czertainly.api.clients.AuthorityInstanceApiClient;
-import com.czertainly.api.clients.EntityInstanceApiClient;
 import com.czertainly.core.client.ConnectorApiFactory;
 import com.czertainly.api.exception.ConnectorException;
 import com.czertainly.api.exception.NotFoundException;
@@ -49,9 +47,7 @@ public class CallbackServiceImpl implements CallbackService {
     private CoreCallbackService coreCallbackService;
     private CredentialService credentialService;
     private AuthorityInstanceReferenceRepository authorityInstanceReferenceRepository;
-    private AuthorityInstanceApiClient authorityInstanceApiClient;
     private EntityInstanceReferenceRepository entityInstanceReferenceRepository;
-    private EntityInstanceApiClient entityInstanceApiClient;
     private CryptographicKeyService cryptographicKeyService;
     private TokenProfileService tokenProfileService;
     private AttributeEngine attributeEngine;
@@ -82,18 +78,8 @@ public class CallbackServiceImpl implements CallbackService {
     }
 
     @Autowired
-    public void setAuthorityInstanceApiClient(AuthorityInstanceApiClient authorityInstanceApiClient) {
-        this.authorityInstanceApiClient = authorityInstanceApiClient;
-    }
-
-    @Autowired
     public void setEntityInstanceReferenceRepository(EntityInstanceReferenceRepository entityInstanceReferenceRepository) {
         this.entityInstanceReferenceRepository = entityInstanceReferenceRepository;
-    }
-
-    @Autowired
-    public void setEntityInstanceApiClient(EntityInstanceApiClient entityInstanceApiClient) {
-        this.entityInstanceApiClient = entityInstanceApiClient;
     }
 
     @Autowired
@@ -147,7 +133,7 @@ public class CallbackServiceImpl implements CallbackService {
                                 )
                         );
                 connector = authorityInstance.getConnector();
-                definitions = authorityInstanceApiClient.listRAProfileAttributes(
+                definitions = connectorApiFactory.getAuthorityInstanceApiClient(connector.mapToDto()).listRAProfileAttributes(
                         connector.mapToDto(),
                         authorityInstance.getAuthorityInstanceUuid()
                 );
@@ -178,7 +164,7 @@ public class CallbackServiceImpl implements CallbackService {
                         )
                 );
                 connector = entityInstance.getConnector();
-                definitions = entityInstanceApiClient.listLocationAttributes(connector.mapToDto(), entityInstance.getEntityInstanceUuid());
+                definitions = connectorApiFactory.getEntityInstanceApiClient(connector.mapToDto()).listLocationAttributes(connector.mapToDto(), entityInstance.getEntityInstanceUuid());
                 break;
 
             default:

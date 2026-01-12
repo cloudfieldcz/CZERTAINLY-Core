@@ -45,6 +45,8 @@ class ProxyClientIntegrationTest extends BaseSpringBootTest {
     void setUpProxyTest() {
         // Reset mock interaction counts between tests
         reset(jmsTemplate);
+        // Clear any pending requests from previous tests
+        correlator.clearPendingRequests();
     }
 
     // ==================== End-to-End Flow Tests ====================
@@ -58,11 +60,14 @@ class ProxyClientIntegrationTest extends BaseSpringBootTest {
         CompletableFuture<String> future = proxyClient.sendRequestAsync(
                 connector, "/v1/test", "GET", null, String.class);
 
-        // Verify request was registered
-        assertThat(correlator.getPendingCount()).isGreaterThanOrEqualTo(1);
+        // Verify request was registered and message was sent via JMS
+        await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> {
+            assertThat(correlator.getPendingCount()).isGreaterThanOrEqualTo(1);
+            verify(jmsTemplate).convertAndSend(any(String.class), any(CoreMessage.class), any());
+        });
 
-        // Verify message was sent via JMS
-        verify(jmsTemplate).convertAndSend(any(String.class), any(CoreMessage.class), any());
+        // Cleanup to avoid leaking pending request
+        future.cancel(true);
     }
 
     @Test

@@ -196,8 +196,8 @@ class ProxyMessageCorrelatorTest {
     @DisplayName("After timeout, future completes with timeout response containing error details")
     void registerRequest_afterTimeout_futureCompletesWithTimeoutResponse() throws Exception {
         String correlationId = "corr-timeout";
-        // Use a very short timeout
-        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofMillis(100));
+        // Use a short timeout (300ms provides margin for CI jitter)
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofMillis(300));
 
         // Wait for timeout using Awaitility
         await().atMost(Duration.ofSeconds(2)).until(future::isDone);
@@ -215,7 +215,7 @@ class ProxyMessageCorrelatorTest {
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     void timeout_decrementsPendingCount() {
-        correlator.registerRequest("corr-timeout", Duration.ofMillis(100));
+        correlator.registerRequest("corr-timeout", Duration.ofMillis(300));
         assertThat(correlator.getPendingCount()).isEqualTo(1);
 
         // Wait for timeout to fire using Awaitility
@@ -228,14 +228,14 @@ class ProxyMessageCorrelatorTest {
     @DisplayName("Completion before timeout preserves successful response")
     void timeout_doesNotAffectAlreadyCompletedRequest() throws Exception {
         String correlationId = "corr-complete-before-timeout";
-        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofMillis(200));
+        CompletableFuture<ProxyMessage> future = correlator.registerRequest(correlationId, Duration.ofMillis(400));
 
         // Complete immediately
         ProxyMessage successMessage = createSuccessMessage(correlationId);
         correlator.completeRequest(successMessage);
 
         // Wait past the original timeout using Awaitility
-        await().during(Duration.ofMillis(300)).atMost(Duration.ofMillis(500))
+        await().during(Duration.ofMillis(500)).atMost(Duration.ofMillis(800))
                .untilAsserted(() -> assertThat(future.isDone()).isTrue());
 
         // Should still have the success response, not timeout
@@ -295,10 +295,12 @@ class ProxyMessageCorrelatorTest {
         ProxyMessage message2 = future2.get(5, TimeUnit.SECONDS);
         ProxyMessage message3 = future3.get(5, TimeUnit.SECONDS);
 
-        // With shutdown error
-        assertThat(message1.getConnectorResponse().getErrorCategory()).isEqualTo("connection");
-        assertThat(message1.getConnectorResponse().getError()).isEqualTo("ProxyClient shutdown");
-        assertThat(message1.getConnectorResponse().isRetryable()).isFalse();
+        // All should have shutdown error
+        for (ProxyMessage m : List.of(message1, message2, message3)) {
+            assertThat(m.getConnectorResponse().getErrorCategory()).isEqualTo("connection");
+            assertThat(m.getConnectorResponse().getError()).contains("shutdown");
+            assertThat(m.getConnectorResponse().isRetryable()).isFalse();
+        }
     }
 
     @Test

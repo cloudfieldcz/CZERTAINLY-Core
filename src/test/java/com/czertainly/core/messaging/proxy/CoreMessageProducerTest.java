@@ -137,20 +137,6 @@ class CoreMessageProducerTest {
     }
 
     @Test
-    void send_withRabbitMQNoExchangePrefix_usesTopicOnly() throws JMSException {
-        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.SERVICEBUS);
-
-        CoreMessage message = createCoreMessage("corr-1");
-        producer.send(message, "proxy-003");
-
-        verify(jmsTemplate).convertAndSend(
-                eq("czertainly-proxy"),
-                eq(message),
-                any(MessagePostProcessor.class)
-        );
-    }
-
-    @Test
     void send_withRabbitMQ_setsCorrectRoutingKey() throws JMSException {
         when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.RABBITMQ);
 

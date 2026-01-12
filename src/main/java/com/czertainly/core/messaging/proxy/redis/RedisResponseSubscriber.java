@@ -40,6 +40,10 @@ public class RedisResponseSubscriber {
     public void onMessage(String message) {
         try {
             ProxyMessage proxyMessage = objectMapper.readValue(message, ProxyMessage.class);
+            if (proxyMessage == null) {
+                log.warn("Received null proxy message from Redis, skipping");
+                return;
+            }
             String correlationId = proxyMessage.getCorrelationId();
 
             if (correlationId == null) {

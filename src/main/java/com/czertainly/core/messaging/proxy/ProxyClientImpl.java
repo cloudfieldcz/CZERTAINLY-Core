@@ -161,20 +161,22 @@ public class ProxyClientImpl implements ProxyClient {
             throw new IllegalArgumentException("Connector proxyId must be set to use ProxyClient");
         }
 
+        // Resolve path variables
+        String resolvedPath = resolvePath(path, pathVariables);
+
         log.debug("Sending async proxy request correlationId={} proxyId={} method={} path={}",
-                correlationId, proxyId, method, path);
+                correlationId, proxyId, method, resolvedPath);
 
         // Build the core message
         CoreMessage message = CoreMessage.builder()
                 .correlationId(correlationId)
-                .messageType(toMessageType(method, path))
+                .messageType(toMessageType(method, resolvedPath))
                 .timestamp(Instant.now())
                 .connectorRequest(ConnectorRequest.builder()
                         .connectorUrl(connector.getUrl())
                         .method(method)
-                        .path(path)
+                        .path(resolvedPath)
                         .connectorAuth(authConverter.convert(connector))
-                        .pathVariables(pathVariables)
                         .body(body)
                         .timeout(formatTimeout(timeout))
                         .build())
@@ -308,6 +310,20 @@ public class ProxyClientImpl implements ProxyClient {
         } else {
             sneakyThrow(new ConnectorException(errorMessage, connector));
         }
+    }
+
+    /**
+     * Resolve path variables in the URL path.
+     */
+    private String resolvePath(String path, Map<String, String> pathVariables) {
+        if (pathVariables == null || pathVariables.isEmpty()) {
+            return path;
+        }
+        String resolved = path;
+        for (Map.Entry<String, String> entry : pathVariables.entrySet()) {
+            resolved = resolved.replace("{" + entry.getKey() + "}", entry.getValue());
+        }
+        return resolved;
     }
 
     /**

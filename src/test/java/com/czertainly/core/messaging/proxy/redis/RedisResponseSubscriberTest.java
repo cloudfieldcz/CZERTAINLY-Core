@@ -91,6 +91,8 @@ class RedisResponseSubscriberTest {
         when(correlator.tryCompleteRequest(message)).thenThrow(new IllegalStateException("Correlator error"));
 
         assertThatCode(() -> subscriber.onMessage(jsonMessage)).doesNotThrowAnyException();
+
+        verify(correlator).tryCompleteRequest(message);
     }
 
     private ProxyMessage createMessage(String correlationId) {

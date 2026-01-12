@@ -80,11 +80,7 @@ public class CoreMessageProducer {
             return proxyProperties.exchange();
         }
 
-        // For RabbitMQ, include exchange prefix if configured
-        String exchangePrefix = "/exchanges/";
-        if (exchangePrefix != null) {
-            return exchangePrefix + proxyProperties.exchange();
-        }
-        return proxyProperties.exchange();
+        // For RabbitMQ, include exchange prefix
+        return "/exchanges/" + proxyProperties.exchange();
     }
 }
