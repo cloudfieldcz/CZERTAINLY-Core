@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -112,6 +113,25 @@ class ProxyControllerTest extends BaseSpringBootTest {
         mockMvc.perform(put("/v1/proxies/{uuid}", "00000000-0000-0000-0000-000000000000")
                 .contentType("application/json")
                 .content(requestBody))
+            .andExpectAll(status().isNotFound());
+    }
+
+    @Test
+    void deleteProxy() throws Exception {
+        Proxy proxy = new Proxy();
+        proxy.setName("testProxy4");
+        proxy.setDescription("Test Proxy 4");
+        proxy.setCode("TEST_PROXY_4");
+        proxy.setStatus(ProxyStatus.CONNECTED);
+        proxy = proxyRepository.save(proxy);
+
+        mockMvc.perform(delete("/v1/proxies/{uuid}", proxy.getUuid()))
+            .andExpectAll(status().isNoContent());
+    }
+
+    @Test
+    void deleteProxy_notFound() throws Exception {
+        mockMvc.perform(delete("/v1/proxies/{uuid}", "00000000-0000-0000-0000-000000000000"))
             .andExpectAll(status().isNotFound());
     }
 }

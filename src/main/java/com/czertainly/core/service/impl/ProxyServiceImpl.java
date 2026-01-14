@@ -10,6 +10,7 @@ import com.czertainly.api.model.common.NameAndUuidDto;
 import com.czertainly.api.model.core.auth.Resource;
 import com.czertainly.api.model.core.proxy.ProxyDto;
 import com.czertainly.api.model.core.proxy.ProxyStatus;
+import com.czertainly.core.dao.entity.Connector;
 import com.czertainly.core.dao.entity.Proxy;
 import com.czertainly.core.dao.entity.Proxy_;
 import com.czertainly.core.dao.repository.ProxyRepository;
@@ -26,9 +27,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service(Resource.Codes.PROXY)
 @Transactional
@@ -99,6 +102,28 @@ public class ProxyServiceImpl implements ProxyService {
         proxyRepository.save(proxy);
 
         return proxy.mapToDto();
+    }
+
+    @Override
+    @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.DELETE)
+    public void deleteProxy(SecuredUUID uuid) throws NotFoundException {
+        Proxy proxy = proxyRepository.findByUuid(uuid)
+            .orElseThrow(() -> new NotFoundException(Proxy.class, uuid));
+        deleteProxy(proxy);
+
+    }
+
+    private void deleteProxy(Proxy proxy) {
+        List<String> errors = new ArrayList<>();
+        if (!proxy.getConnectors().isEmpty()) {
+            errors.add("Dependent connectors: " + String.join(", ", proxy.getConnectors().stream().map(Connector::getName).collect(Collectors.toSet())));
+        }
+
+        if (!errors.isEmpty()) {
+            throw new ValidationException(ValidationError.create(String.join("\n", errors)));
+        }
+
+        proxyRepository.delete(proxy);
     }
 
     @Override

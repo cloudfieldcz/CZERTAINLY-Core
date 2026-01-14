@@ -71,4 +71,10 @@ public class ProxyControllerImpl implements ProxyController {
         throws NotFoundException {
         return proxyService.editProxy(SecuredUUID.fromString(uuid), request);
     }
+
+    @Override
+    @AuditLogged(module = Module.CORE, resource = Resource.PROXY, operation = Operation.DELETE)
+    public void deleteProxy(@LogResource(uuid = true) @PathVariable String uuid) throws NotFoundException {
+        proxyService.deleteProxy(SecuredUUID.fromString(uuid));
+    }
 }

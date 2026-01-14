@@ -8,7 +8,9 @@ import com.czertainly.api.model.client.proxy.ProxyUpdateRequestDto;
 import com.czertainly.api.model.common.NameAndUuidDto;
 import com.czertainly.api.model.core.proxy.ProxyDto;
 import com.czertainly.api.model.core.proxy.ProxyStatus;
+import com.czertainly.core.dao.entity.Connector;
 import com.czertainly.core.dao.entity.Proxy;
+import com.czertainly.core.dao.repository.ConnectorRepository;
 import com.czertainly.core.dao.repository.ProxyRepository;
 import com.czertainly.core.security.authz.SecuredUUID;
 import com.czertainly.core.security.authz.SecurityFilter;
@@ -30,6 +32,9 @@ class ProxyServiceTest extends BaseSpringBootTest {
 
     @Autowired
     private ProxyRepository proxyRepository;
+
+    @Autowired
+    private ConnectorRepository connectorRepository;
 
     private Proxy proxy;
 
@@ -128,6 +133,44 @@ class ProxyServiceTest extends BaseSpringBootTest {
         ProxyUpdateRequestDto request = new ProxyUpdateRequestDto();
         request.setDescription("Updated Description");
         Assertions.assertThrows(NotFoundException.class, () -> proxyService.editProxy(SecuredUUID.fromString("abfbc322-29e1-11ed-a261-0242ac120002"), request));
+    }
+
+    @Test
+    void testDeleteProxy() throws NotFoundException {
+        Proxy proxyToDelete = new Proxy();
+        proxyToDelete.setName("testProxyDelete");
+        proxyToDelete.setDescription("Test Proxy to Delete");
+        proxyToDelete.setCode("TEST_PROXY_DELETE");
+        proxyToDelete.setStatus(ProxyStatus.CONNECTED);
+        proxyToDelete = proxyRepository.save(proxyToDelete);
+
+        proxyService.deleteProxy(proxyToDelete.getSecuredUuid());
+
+        Assertions.assertTrue(proxyRepository.findByUuid(proxyToDelete.getUuid()).isEmpty());
+    }
+
+    @Test
+    void testDeleteProxy_notFound() {
+        Assertions.assertThrows(NotFoundException.class, () -> proxyService.deleteProxy(SecuredUUID.fromString("abfbc322-29e1-11ed-a261-0242ac120002")));
+    }
+
+    @Test
+    void testDeleteProxy_withConnector() {
+        Proxy proxyWithConnector = new Proxy();
+        proxyWithConnector.setName("testProxyWithConnector");
+        proxyWithConnector.setDescription("Test Proxy with Connector");
+        proxyWithConnector.setCode("TEST_PROXY_WITH_CONNECTOR");
+        proxyWithConnector.setStatus(ProxyStatus.CONNECTED);
+        proxyWithConnector = proxyRepository.save(proxyWithConnector);
+
+        Connector connector = new Connector();
+        connector.setName("testConnector");
+        connector.setUrl("http://localhost:8080");
+        connector.setProxy(proxyWithConnector);
+        connectorRepository.save(connector);
+
+        Proxy finalProxyWithConnector = proxyRepository.save(proxyWithConnector);
+        Assertions.assertThrows(ValidationException.class, () -> proxyService.deleteProxy(finalProxyWithConnector.getSecuredUuid()));
     }
 
     @Test

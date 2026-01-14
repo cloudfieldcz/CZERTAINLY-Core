@@ -24,4 +24,6 @@ public interface ProxyService extends ResourceExtensionService {
     ProxyDto createProxy(ProxyRequestDto request) throws AlreadyExistException;
 
     ProxyDto editProxy(SecuredUUID uuid, ProxyUpdateRequestDto request) throws NotFoundException;
+
+    void deleteProxy(SecuredUUID uuid) throws NotFoundException;
 }
