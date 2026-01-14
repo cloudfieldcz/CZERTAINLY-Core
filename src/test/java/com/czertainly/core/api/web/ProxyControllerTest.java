@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -74,5 +75,43 @@ class ProxyControllerTest extends BaseSpringBootTest {
                 .content(requestBody))
             .andExpectAll(status().isCreated(),
                 jsonPath("$.uuid").exists());
+    }
+
+    @Test
+    void editProxy() throws Exception {
+        Proxy proxy = new Proxy();
+        proxy.setName("testProxy3");
+        proxy.setDescription("Test Proxy 3");
+        proxy.setCode("TEST_PROXY_3");
+        proxy.setStatus(ProxyStatus.CONNECTED);
+        proxy = proxyRepository.save(proxy);
+
+        String requestBody = """
+            {
+                "description": "Updated Test Proxy 3"
+            }
+            """;
+
+        mockMvc.perform(put("/v1/proxies/{uuid}", proxy.getUuid())
+                .contentType("application/json")
+                .content(requestBody))
+            .andExpectAll(status().isOk(),
+                jsonPath("$.uuid").value(proxy.getUuid().toString()),
+                jsonPath("$.name").value(proxy.getName()),
+                jsonPath("$.description").value("Updated Test Proxy 3"));
+    }
+
+    @Test
+    void editProxy_notFound() throws Exception {
+        String requestBody = """
+            {
+                "description": "Updated Description"
+            }
+            """;
+
+        mockMvc.perform(put("/v1/proxies/{uuid}", "00000000-0000-0000-0000-000000000000")
+                .contentType("application/json")
+                .content(requestBody))
+            .andExpectAll(status().isNotFound());
     }
 }

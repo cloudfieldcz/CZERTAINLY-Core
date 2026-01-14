@@ -4,6 +4,7 @@ import com.czertainly.api.exception.AlreadyExistException;
 import com.czertainly.api.exception.NotFoundException;
 import com.czertainly.api.interfaces.core.web.ProxyController;
 import com.czertainly.api.model.client.proxy.ProxyRequestDto;
+import com.czertainly.api.model.client.proxy.ProxyUpdateRequestDto;
 import com.czertainly.api.model.common.UuidDto;
 import com.czertainly.api.model.core.auth.Resource;
 import com.czertainly.api.model.core.logging.enums.Module;
@@ -62,5 +63,12 @@ public class ProxyControllerImpl implements ProxyController {
         UuidDto dto = new UuidDto();
         dto.setUuid(proxyDto.getUuid());
         return ResponseEntity.created(location).body(dto);
+    }
+
+    @Override
+    @AuditLogged(module = Module.CORE, resource = Resource.PROXY, operation = Operation.UPDATE)
+    public ProxyDto editProxy(@LogResource(uuid = true) @PathVariable String uuid, @RequestBody ProxyUpdateRequestDto request)
+        throws NotFoundException {
+        return proxyService.editProxy(SecuredUUID.fromString(uuid), request);
     }
 }

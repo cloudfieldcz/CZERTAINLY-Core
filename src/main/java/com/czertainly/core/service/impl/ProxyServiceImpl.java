@@ -5,6 +5,7 @@ import com.czertainly.api.exception.NotFoundException;
 import com.czertainly.api.exception.ValidationError;
 import com.czertainly.api.exception.ValidationException;
 import com.czertainly.api.model.client.proxy.ProxyRequestDto;
+import com.czertainly.api.model.client.proxy.ProxyUpdateRequestDto;
 import com.czertainly.api.model.common.NameAndUuidDto;
 import com.czertainly.api.model.core.auth.Resource;
 import com.czertainly.api.model.core.proxy.ProxyDto;
@@ -23,7 +24,6 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -87,18 +87,33 @@ public class ProxyServiceImpl implements ProxyService {
     }
 
     @Override
+    @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.UPDATE)
+    public ProxyDto editProxy(SecuredUUID uuid, ProxyUpdateRequestDto request) throws NotFoundException {
+        Proxy proxy = proxyRepository.findByUuid(uuid)
+            .orElseThrow(() -> new NotFoundException(Proxy.class, uuid));
+
+        if (request.getDescription() != null) {
+            proxy.setDescription(request.getDescription());
+        }
+
+        proxyRepository.save(proxy);
+
+        return proxy.mapToDto();
+    }
+
+    @Override
     public NameAndUuidDto getResourceObject(UUID objectUuid) throws NotFoundException {
         return proxyRepository.findResourceObject(objectUuid, Proxy_.name);
     }
 
     @Override
-    @ExternalAuthorization(resource = Resource.CONNECTOR, action = ResourceAction.LIST)
+    @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.LIST)
     public List<NameAndUuidDto> listResourceObjects(SecurityFilter filter) {
         return proxyRepository.listResourceObjects(filter, Proxy_.name);
     }
 
     @Override
-    @ExternalAuthorization(resource = Resource.CONNECTOR, action = ResourceAction.UPDATE)
+    @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.UPDATE)
     public void evaluatePermissionChain(SecuredUUID uuid) throws NotFoundException {
         getProxyEntity(uuid);
         // Since there are is no parent to the Proxy, exclusive parent permission evaluation need not be done

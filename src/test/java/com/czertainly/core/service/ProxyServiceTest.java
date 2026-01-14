@@ -4,6 +4,7 @@ import com.czertainly.api.exception.AlreadyExistException;
 import com.czertainly.api.exception.NotFoundException;
 import com.czertainly.api.exception.ValidationException;
 import com.czertainly.api.model.client.proxy.ProxyRequestDto;
+import com.czertainly.api.model.client.proxy.ProxyUpdateRequestDto;
 import com.czertainly.api.model.common.NameAndUuidDto;
 import com.czertainly.api.model.core.proxy.ProxyDto;
 import com.czertainly.api.model.core.proxy.ProxyStatus;
@@ -108,6 +109,25 @@ class ProxyServiceTest extends BaseSpringBootTest {
         ProxyRequestDto request = new ProxyRequestDto();
         request.setName(PROXY_NAME);
         Assertions.assertThrows(AlreadyExistException.class, () -> proxyService.createProxy(request));
+    }
+
+    @Test
+    void testEditProxy() throws NotFoundException {
+        ProxyUpdateRequestDto request = new ProxyUpdateRequestDto();
+        request.setDescription("Updated Test Proxy 1");
+
+        ProxyDto dto = proxyService.editProxy(proxy.getSecuredUuid(), request);
+        Assertions.assertNotNull(dto);
+        Assertions.assertEquals(proxy.getUuid().toString(), dto.getUuid());
+        Assertions.assertEquals(proxy.getName(), dto.getName());
+        Assertions.assertEquals("Updated Test Proxy 1", dto.getDescription());
+    }
+
+    @Test
+    void testEditProxy_notFound() {
+        ProxyUpdateRequestDto request = new ProxyUpdateRequestDto();
+        request.setDescription("Updated Description");
+        Assertions.assertThrows(NotFoundException.class, () -> proxyService.editProxy(SecuredUUID.fromString("abfbc322-29e1-11ed-a261-0242ac120002"), request));
     }
 
     @Test

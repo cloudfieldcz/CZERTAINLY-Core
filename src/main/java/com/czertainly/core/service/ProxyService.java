@@ -3,6 +3,7 @@ package com.czertainly.core.service;
 import com.czertainly.api.exception.AlreadyExistException;
 import com.czertainly.api.exception.NotFoundException;
 import com.czertainly.api.model.client.proxy.ProxyRequestDto;
+import com.czertainly.api.model.client.proxy.ProxyUpdateRequestDto;
 import com.czertainly.api.model.core.proxy.ProxyDto;
 import com.czertainly.api.model.core.proxy.ProxyStatus;
 import com.czertainly.core.dao.entity.Proxy;
@@ -21,4 +22,6 @@ public interface ProxyService extends ResourceExtensionService {
     Proxy getProxyEntity(SecuredUUID uuid) throws NotFoundException;
 
     ProxyDto createProxy(ProxyRequestDto request) throws AlreadyExistException;
+
+    ProxyDto editProxy(SecuredUUID uuid, ProxyUpdateRequestDto request) throws NotFoundException;
 }
