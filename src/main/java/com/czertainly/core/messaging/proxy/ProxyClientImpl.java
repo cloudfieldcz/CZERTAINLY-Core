@@ -155,17 +155,17 @@ public class ProxyClientImpl implements ProxyClient {
             Duration timeout) {
 
         String correlationId = UUID.randomUUID().toString();
-        String proxyId = connector.getProxyId();
+        String proxyCode = connector.getProxy() != null ? connector.getProxy().getCode() : null;
 
-        if (proxyId == null || proxyId.isBlank()) {
-            throw new IllegalArgumentException("Connector proxyId must be set to use ProxyClient");
+        if (proxyCode == null || proxyCode.isBlank()) {
+            throw new IllegalArgumentException("Connector proxy code must be set to use ProxyClient");
         }
 
         // Resolve path variables
         String resolvedPath = resolvePath(path, pathVariables);
 
-        log.debug("Sending async proxy request correlationId={} proxyId={} method={} path={}",
-                correlationId, proxyId, method, resolvedPath);
+        log.debug("Sending async proxy request correlationId={} proxyCode={} method={} path={}",
+                correlationId, proxyCode, method, resolvedPath);
 
         // Build the core message
         CoreMessage message = CoreMessage.builder()
@@ -186,7 +186,7 @@ public class ProxyClientImpl implements ProxyClient {
         CompletableFuture<ProxyMessage> messageFuture = correlator.registerRequest(correlationId, timeout);
 
         // Send the request
-        producer.send(message, proxyId);
+        producer.send(message, proxyCode);
 
         // Transform the response
         return messageFuture.thenApply(proxyMessage -> handleResponse(proxyMessage, responseType, connector));
@@ -350,10 +350,10 @@ public class ProxyClientImpl implements ProxyClient {
             Object body,
             String messageType) {
 
-        String proxyId = connector.getProxyId();
+        String proxyCode = connector.getProxy() != null ? connector.getProxy().getCode() : null;
 
-        if (proxyId == null || proxyId.isBlank()) {
-            throw new IllegalArgumentException("Connector proxyId must be set to use ProxyClient");
+        if (proxyCode == null || proxyCode.isBlank()) {
+            throw new IllegalArgumentException("Connector proxy code must be set to use ProxyClient");
         }
 
         // Use provided messageType or derive from method + path
@@ -361,8 +361,8 @@ public class ProxyClientImpl implements ProxyClient {
                 ? messageType
                 : toMessageType(method, path);
 
-        log.debug("Sending fire-and-forget proxy request proxyId={} method={} path={} messageType={}",
-                proxyId, method, path, resolvedMessageType);
+        log.debug("Sending fire-and-forget proxy request proxyCode={} method={} path={} messageType={}",
+                proxyCode, method, path, resolvedMessageType);
 
         // Build the core message - no correlationId for fire-and-forget
         CoreMessage message = CoreMessage.builder()
@@ -378,9 +378,9 @@ public class ProxyClientImpl implements ProxyClient {
                 .build();
 
         // Send without registering for response
-        producer.send(message, proxyId);
+        producer.send(message, proxyCode);
 
-        log.debug("Sent fire-and-forget proxy request proxyId={} messageType={}", proxyId, resolvedMessageType);
+        log.debug("Sent fire-and-forget proxy request proxyCode={} messageType={}", proxyCode, resolvedMessageType);
     }
 
     /**

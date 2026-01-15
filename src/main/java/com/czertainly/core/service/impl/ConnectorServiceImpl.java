@@ -208,7 +208,6 @@ public class ConnectorServiceImpl implements ConnectorService {
         connector.setAuthType(request.getAuthType());
         connector.setAuthAttributes(AttributeDefinitionUtils.serialize(authAttributes));
         connector.setStatus(connectorStatus);
-        connector.setProxyId(request.getProxyId());
         connectorRepository.save(connector);
 
         setFunctionGroups(functionGroupDtos, connector);
@@ -243,7 +242,6 @@ public class ConnectorServiceImpl implements ConnectorService {
         connector.setAuthType(request.getAuthType());
         connector.setAuthAttributes(AttributeDefinitionUtils.serialize(authAttributes));
         connector.setStatus(connectorStatus);
-        connector.setProxyId(request.getProxyId());
         connectorRepository.save(connector);
 
         setFunctionGroups(request.getFunctionGroups(), connector);
@@ -269,8 +267,6 @@ public class ConnectorServiceImpl implements ConnectorService {
             connector.setAuthType(request.getAuthType());
             connector.setAuthAttributes(AttributeDefinitionUtils.serialize(authAttributes));
         }
-        // proxyId can be set to null to switch back to REST, so we always update it
-        connector.setProxyId(request.getProxyId());
 
         connectorRepository.save(connector);
 

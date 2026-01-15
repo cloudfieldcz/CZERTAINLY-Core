@@ -5,6 +5,7 @@ import com.czertainly.api.clients.mq.model.CoreMessage;
 import com.czertainly.api.clients.mq.model.ProxyMessage;
 import com.czertainly.api.model.core.connector.AuthType;
 import com.czertainly.api.model.core.connector.ConnectorDto;
+import com.czertainly.api.model.core.proxy.ProxyDto;
 import com.czertainly.core.util.BaseSpringBootTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -169,9 +170,13 @@ class ProxyClientIntegrationTest extends BaseSpringBootTest {
 
     // ==================== Helper Methods ====================
 
-    private ConnectorDto createConnector(String proxyId) {
+    private ConnectorDto createConnector(String proxyCode) {
         ConnectorDto connector = new ConnectorDto();
-        connector.setProxyId(proxyId);
+        if (proxyCode != null) {
+            ProxyDto proxy = new ProxyDto();
+            proxy.setCode(proxyCode);
+            connector.setProxy(proxy);
+        }
         connector.setUrl("http://connector.example.com");
         connector.setAuthType(AuthType.NONE);
         return connector;

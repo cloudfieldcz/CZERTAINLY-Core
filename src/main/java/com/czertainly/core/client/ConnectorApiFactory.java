@@ -116,7 +116,7 @@ public class ConnectorApiFactory {
     private <T> T getClient(ConnectorDto connector, T restClient, Optional<? extends T> mqClient) {
         Objects.requireNonNull(connector, "connector must not be null");
         if (shouldUseMq(connector) && mqClient.isPresent()) {
-            log.debug("Using MQ client for connector {} via proxy {}", connector.getName(), connector.getProxyId());
+            log.debug("Using MQ client for connector {} via proxy {}", connector.getName(), connector.getProxy().getCode());
             return mqClient.get();
         }
         return restClient;
@@ -194,10 +194,10 @@ public class ConnectorApiFactory {
      * Check if MQ-based communication should be used for the given connector.
      *
      * @param connector Connector configuration
-     * @return true if connector has a non-empty proxyId set
+     * @return true if connector has a proxy with non-empty code set
      */
     private boolean shouldUseMq(ConnectorDto connector) {
-        return connector.getProxyId() != null && !connector.getProxyId().isBlank();
+        return connector.getProxy() != null && connector.getProxy().getCode() != null && !connector.getProxy().getCode().isBlank();
     }
 
 }

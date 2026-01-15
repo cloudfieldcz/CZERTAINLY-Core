@@ -7,6 +7,7 @@ import com.czertainly.api.clients.mq.model.ProxyMessage;
 import com.czertainly.api.exception.*;
 import com.czertainly.api.model.core.connector.AuthType;
 import com.czertainly.api.model.core.connector.ConnectorDto;
+import com.czertainly.api.model.core.proxy.ProxyDto;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -535,27 +536,31 @@ class ProxyClientImplTest {
     // ==================== Exception Propagation ====================
 
     @Test
-    void sendRequest_withNullProxyId_throwsIllegalArgumentException() {
+    void sendRequest_withNullProxy_throwsIllegalArgumentException() {
         ConnectorDto connector = new ConnectorDto();
-        connector.setProxyId(null);
+        connector.setProxy(null);
 
         assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void sendRequest_withEmptyProxyId_throwsIllegalArgumentException() {
+    void sendRequest_withEmptyProxyCode_throwsIllegalArgumentException() {
         ConnectorDto connector = new ConnectorDto();
-        connector.setProxyId("");
+        ProxyDto proxy = new ProxyDto();
+        proxy.setCode("");
+        connector.setProxy(proxy);
 
         assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void sendRequest_withWhitespaceProxyId_throwsIllegalArgumentException() {
+    void sendRequest_withWhitespaceProxyCode_throwsIllegalArgumentException() {
         ConnectorDto connector = new ConnectorDto();
-        connector.setProxyId("   ");
+        ProxyDto proxy = new ProxyDto();
+        proxy.setCode("   ");
+        connector.setProxy(proxy);
 
         assertThatThrownBy(() -> proxyClient.sendRequest(connector, "/v1/test", "GET", null, String.class))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -671,19 +676,21 @@ class ProxyClientImplTest {
     }
 
     @Test
-    void sendFireAndForget_withNullProxyId_throwsIllegalArgumentException() {
+    void sendFireAndForget_withNullProxy_throwsIllegalArgumentException() {
         ConnectorDto connector = new ConnectorDto();
-        connector.setProxyId(null);
+        connector.setProxy(null);
 
         assertThatThrownBy(() -> proxyClient.sendFireAndForget(connector, "/v1/test", "POST", null))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("proxyId");
+                .hasMessageContaining("proxy");
     }
 
     @Test
-    void sendFireAndForget_withEmptyProxyId_throwsIllegalArgumentException() {
+    void sendFireAndForget_withEmptyProxyCode_throwsIllegalArgumentException() {
         ConnectorDto connector = new ConnectorDto();
-        connector.setProxyId("");
+        ProxyDto proxy = new ProxyDto();
+        proxy.setCode("");
+        connector.setProxy(proxy);
 
         assertThatThrownBy(() -> proxyClient.sendFireAndForget(connector, "/v1/test", "POST", null))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -740,9 +747,13 @@ class ProxyClientImplTest {
 
     // ==================== Helper Methods ====================
 
-    private ConnectorDto createConnector(String proxyId) {
+    private ConnectorDto createConnector(String proxyCode) {
         ConnectorDto connector = new ConnectorDto();
-        connector.setProxyId(proxyId);
+        if (proxyCode != null) {
+            ProxyDto proxy = new ProxyDto();
+            proxy.setCode(proxyCode);
+            connector.setProxy(proxy);
+        }
         connector.setUrl("http://connector.example.com");
         connector.setAuthType(AuthType.NONE);
         return connector;
