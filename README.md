@@ -59,9 +59,20 @@ Operations can be automated by the `Core`, but also can be performed manually by
 - CMP
 
 ## Message brokers support
-Application now supports two types of message brokers:
-- RabbitMQ (uses CachingConnectionFactory, BROKER_SESSION_CACHE_SIZE can be specified)
-- Azure Service Bus (uses JmsConnectionFactory)
+
+Application supports two types of message brokers:
+- **RabbitMQ** - uses CachingConnectionFactory with configurable session cache size
+- **Azure Service Bus** - uses JmsConnectionFactory with two authentication options:
+  - **SAS (Shared Access Signature)** - uses connection string with policy name and key
+  - **AAD (Azure Active Directory / Entra ID)** - uses OAuth2 with Service Principal credentials
+
+### Authentication configuration
+
+| Broker              | Authentication    | Required variables                                          |
+|---------------------|-------------------|-------------------------------------------------------------|
+| RabbitMQ            | Username/Password | `BROKER_USERNAME`, `BROKER_PASSWORD`                        |
+| Azure Service Bus   | SAS               | `BROKER_USERNAME`, `BROKER_PASSWORD`                        |
+| Azure Service Bus   | AAD               | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` |
 
 ## Docker container
 
@@ -85,11 +96,14 @@ Application now supports two types of message brokers:
 | `TRUSTED_CERTIFICATES`            | List of PEM encoded additional trusted certificates                   | ![](https://img.shields.io/badge/-NO-red.svg) | `N/A`               |
 | `SCHEDULER_BASE_URL`              | Base URL of the scheduler service                                     | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`               |
 | `BROKER_TYPE`                     | Message broker type - supported values are `SERVICEBUS` or `RABBITMQ` | ![](https://img.shields.io/badge/-NO-red.svg) | `RABBITMQ`          |
-| `BROKER_URL`                      | Message broker url (include protocol, f.e. amqp://localhost:5672)     | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`               |
-| `BROKER_USERNAME`                 | Message broker username                                               | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`               |
-| `BROKER_PASSWORD`                 | Message broker password                                               | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`               |
-| `BROKER_EXCHANGE`                 | Message broker exchange name                                          | ![](https://img.shields.io/badge/-NO-red.svg) | `czertainly`        |
-| `BROKER_VHOST`                    | Message broker vhost (for RabbitMQ only)                              | ![](https://img.shields.io/badge/-NO-red.svg) | `czertainly`        |
+| `BROKER_URL`                      | Message broker url (include protocol, e.g. `amqp://localhost:5672` for RabbitMQ, `amqps://namespace.servicebus.windows.net:5671` for ServiceBus) | ![](https://img.shields.io/badge/-YES-success.svg) | `N/A`               |
+| `BROKER_USERNAME`                 | Message broker username (required for RabbitMQ and ServiceBus+SAS)    | ![](https://img.shields.io/badge/-CONDITIONAL-yellow.svg) | `N/A`               |
+| `BROKER_PASSWORD`                 | Message broker password (required for RabbitMQ and ServiceBus+SAS)    | ![](https://img.shields.io/badge/-CONDITIONAL-yellow.svg) | `N/A`               |
+| `AZURE_TENANT_ID`                 | Azure AD tenant ID (required for ServiceBus+AAD authentication)       | ![](https://img.shields.io/badge/-CONDITIONAL-yellow.svg) | `N/A`               |
+| `AZURE_CLIENT_ID`                 | Azure AD application (client) ID (required for ServiceBus+AAD)        | ![](https://img.shields.io/badge/-CONDITIONAL-yellow.svg) | `N/A`               |
+| `AZURE_CLIENT_SECRET`             | Azure AD client secret (required for ServiceBus+AAD authentication)   | ![](https://img.shields.io/badge/-CONDITIONAL-yellow.svg) | `N/A`               |
+| `BROKER_EXCHANGE`                 | Message broker exchange/topic name                                    | ![](https://img.shields.io/badge/-NO-red.svg) | `czertainly`        |
+| `BROKER_VHOST`                    | Message broker vhost (for RabbitMQ only)                              | ![](https://img.shields.io/badge/-NO-red.svg) | `N/A`               |
 | `BROKER_SESSION_CACHE_SIZE`       | ConnectionCachingFactory session cache size (only for RabbitMQ)       | ![](https://img.shields.io/badge/-NO-red.svg) | `25`                |
 | `BROKER_QUEUE_AUDIT_LOGS`         | Queue name for audit logs (for RabbitMQ only)                         | ![](https://img.shields.io/badge/-NO-red.svg) | `core.audit-logs`   |
 | `BROKER_QUEUE_EVENT`              | Queue name for events (for RabbitMQ only)                             | ![](https://img.shields.io/badge/-NO-red.svg) | `core.event`        |
