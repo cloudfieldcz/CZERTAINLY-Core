@@ -50,33 +50,33 @@ class ProxyServiceTest extends BaseSpringBootTest {
 
     @Test
     void testListProxies() throws NotFoundException {
-        List<ProxyDto> proxys = proxyService.listProxies(SecurityFilter.create(), Optional.empty());
-        Assertions.assertNotNull(proxys);
-        Assertions.assertFalse(proxys.isEmpty());
-        Assertions.assertEquals(1, proxys.size());
-        Assertions.assertEquals(proxy.getUuid().toString(), proxys.getFirst().getUuid());
+        List<ProxyDto> proxies = proxyService.listProxies(SecurityFilter.create(), Optional.empty());
+        Assertions.assertNotNull(proxies);
+        Assertions.assertFalse(proxies.isEmpty());
+        Assertions.assertEquals(1, proxies.size());
+        Assertions.assertEquals(proxy.getUuid().toString(), proxies.getFirst().getUuid());
     }
 
     @Test
     void testListProxiesByStatus() throws NotFoundException {
-        List<ProxyDto> proxys = proxyService.listProxies(
+        List<ProxyDto> proxies = proxyService.listProxies(
             SecurityFilter.create(),
             Optional.of(ProxyStatus.CONNECTED)
         );
-        Assertions.assertNotNull(proxys);
-        Assertions.assertFalse(proxys.isEmpty());
-        Assertions.assertEquals(1, proxys.size());
-        Assertions.assertEquals(proxy.getUuid().toString(), proxys.getFirst().getUuid());
+        Assertions.assertNotNull(proxies);
+        Assertions.assertFalse(proxies.isEmpty());
+        Assertions.assertEquals(1, proxies.size());
+        Assertions.assertEquals(proxy.getUuid().toString(), proxies.getFirst().getUuid());
     }
 
     @Test
     void testListProxiesByStatus_notFound() throws NotFoundException {
-        List<ProxyDto> proxys = proxyService.listProxies(
+        List<ProxyDto> proxies = proxyService.listProxies(
             SecurityFilter.create(),
             Optional.of(ProxyStatus.FAILED)
         );
-        Assertions.assertNotNull(proxys);
-        Assertions.assertTrue(proxys.isEmpty());
+        Assertions.assertNotNull(proxies);
+        Assertions.assertTrue(proxies.isEmpty());
     }
 
     @Test
