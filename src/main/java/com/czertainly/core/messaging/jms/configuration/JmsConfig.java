@@ -45,12 +45,13 @@ public class JmsConfig {
 
         if (props.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
             configureServiceBusAuthentication(factory, props);
-        } else {
-            // RabbitMQ - standard username/password authentication
-            logger.info("Connecting to RabbitMQ broker: {} with vhost: {}", props.brokerUrl(), props.vhost());
-            factory.setUsername(props.user());
-            factory.setPassword(props.password());
+            return factory;
         }
+
+        // RabbitMQ - standard username/password authentication
+        logger.info("Connecting to RabbitMQ broker: {} with vhost: {}", props.brokerUrl(), props.vhost());
+        factory.setUsername(props.user());
+        factory.setPassword(props.password());
 
         // caching connection factory for non-ServiceBus (RabbitMQ)
         CachingConnectionFactory cachingConnectionFactory = new CachingConnectionFactory(factory);
