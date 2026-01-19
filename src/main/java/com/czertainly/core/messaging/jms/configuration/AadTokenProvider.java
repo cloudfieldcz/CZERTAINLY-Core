@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.function.BiFunction;
 
@@ -26,21 +27,24 @@ public class AadTokenProvider implements BiFunction<Connection, URI, Object> {
     private static final Logger logger = LoggerFactory.getLogger(AadTokenProvider.class);
 
     private static final String SERVICEBUS_SCOPE = "https://servicebus.azure.net/.default";
-    private static final int TOKEN_REFRESH_BUFFER_MINUTES = 5;
 
     private final TokenCredential credential;
+    private final int tokenRefreshBufferSeconds;
+    private final int tokenGettingTimeout;
     private volatile String cachedToken;
     private volatile OffsetDateTime tokenExpiry;
 
-    public AadTokenProvider(TokenCredential credential) {
+    public AadTokenProvider(TokenCredential credential, int tokenRefreshBufferSeconds, int tokenGettingTimeoutSeconds) {
         this.credential = credential;
+        this.tokenRefreshBufferSeconds = tokenRefreshBufferSeconds;
+        this.tokenGettingTimeout = tokenGettingTimeoutSeconds;
     }
 
     @Override
     public Object apply(Connection connection, URI uri) {
         logger.debug("AAD PASSWORD_OVERRIDE called for URI: {}", uri);
         String token = getToken();
-        logger.debug("Returning AAD token (length: {}, prefix: {}...)", token.length(), Math.min(10, token.length()));
+        logger.debug("Returning AAD token (length: {}, prefix: {}...)", token.length(), token.substring(0, Math.min(10, token.length())));
         return token;
     }
 
@@ -50,7 +54,7 @@ public class AadTokenProvider implements BiFunction<Connection, URI, Object> {
      * Token is refreshed if:
      * <ul>
      *   <li>No token has been obtained yet</li>
-     *   <li>Token will expire within the next 5 minutes</li>
+     *   <li>Token will expire within the configured refresh buffer period</li>
      * </ul>
      *
      * @return valid OAuth2 access token
@@ -67,16 +71,14 @@ public class AadTokenProvider implements BiFunction<Connection, URI, Object> {
         if (cachedToken == null || tokenExpiry == null) {
             return true;
         }
-        return OffsetDateTime.now().plusMinutes(TOKEN_REFRESH_BUFFER_MINUTES).isAfter(tokenExpiry);
+        return OffsetDateTime.now().plusSeconds(tokenRefreshBufferSeconds).isAfter(tokenExpiry);
     }
 
     private void refreshToken() {
         logger.debug("Refreshing AAD token for ServiceBus authentication");
         try {
-            TokenRequestContext context = new TokenRequestContext()
-                    .addScopes(SERVICEBUS_SCOPE);
-
-            AccessToken accessToken = credential.getToken(context).block();
+            TokenRequestContext context = new TokenRequestContext().addScopes(SERVICEBUS_SCOPE);
+            AccessToken accessToken = credential.getToken(context).block(Duration.ofSeconds(tokenGettingTimeout));
             if (accessToken == null) {
                 throw new RuntimeException("Failed to acquire AAD token: null response");
             }
@@ -86,7 +88,7 @@ public class AadTokenProvider implements BiFunction<Connection, URI, Object> {
 
             logger.debug("AAD token refreshed successfully, expires at: {}", tokenExpiry);
         } catch (Exception e) {
-            logger.error("Failed to refresh AAD token for ServiceBus", e);
+            logger.error("Failed to refresh AAD token for ServiceBus (timeout: {}s)", tokenGettingTimeout, e);
             throw new RuntimeException("Failed to acquire AAD token for ServiceBus authentication", e);
         }
     }

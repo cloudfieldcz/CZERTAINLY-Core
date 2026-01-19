@@ -43,7 +43,7 @@ public record MessagingProperties(
                 if (!hasUserAndPassword && !hasAadAuth) {
                     throw new IllegalArgumentException(
                             "ServiceBus requires either BROKER_USER/BROKER_PASSWORD (SAS) " +
-                                    "or AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET (AAD) to be configured");
+                                    "or BROKER_AZURE_TENANT_ID/BROKER_AZURE_CLIENT_ID/BROKER_AZURE_CLIENT_SECRET (AAD) to be configured");
                 }
             }
         }
@@ -137,7 +137,9 @@ public record MessagingProperties(
     public record AadAuth(
             String tenantId,
             String clientId,
-            String clientSecret
+            String clientSecret,
+            int tokenRefreshInterval,
+            int tokenGettingTimeout
     ) {
         public boolean isEnabled() {
             return StringUtils.isNotBlank(tenantId) && StringUtils.isNotBlank(clientId) && StringUtils.isNotBlank(clientSecret);
