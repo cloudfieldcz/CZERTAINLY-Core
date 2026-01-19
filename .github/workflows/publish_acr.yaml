@@ -1,4 +1,4 @@
-name: Publish 3Key Harbor image
+name: Publish ACR image
 
 on:
   push:
@@ -7,16 +7,22 @@ on:
       - '*'
   workflow_dispatch:
 
+env:
+  REGISTRY: czertainlytestswcacr.azurecr.io
+  IMAGE_NAME: czertainly-core
+
 jobs:
-  push_to_registry:
-    name: Push Docker images
+  build-and-push:
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      actions: write
+
     steps:
       - name: Check out the repo
         uses: actions/checkout@v5
-
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v4.0.0
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -28,19 +34,18 @@ jobs:
         run: |
           ./prebuild_image_script
 
-      - name: Log in to 3Key Harbor
+      - name: Log in to ACR
         uses: docker/login-action@v3
         with:
-          registry: harbor.3key.company
-          username: ${{ secrets.HARBOR_3KEY_USERNAME }}
-          password: ${{ secrets.HARBOR_3KEY_PASSWORD }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            harbor.3key.company/czertainly/czertainly-core
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=tag
             type=semver,pattern={{major}}.{{minor}}
@@ -56,8 +61,6 @@ jobs:
           context: .
           platforms: linux/amd64
           file: ./Dockerfile
-          # Build only the host architecture for the pre-scan build;
-          # --load works only when a single platform is produced.
           load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -91,35 +94,12 @@ jobs:
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
-        id: build-and-push
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           file: ./Dockerfile
           push: true
-          provenance: mode=max
-          sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Sign images with a key
-        run: |
-          images=""
-          for tag in ${TAGS}; do
-            images+="${tag}@${DIGEST} "
-          done
-          cosign sign --yes --key env://COSIGN_PRIVATE_KEY ${images}
-        env:
-          TAGS: ${{ steps.meta.outputs.tags }}
-          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-          DIGEST: ${{ steps.build-and-push.outputs.digest }}
-
-      - name: Push README to 3Key Harbor
-        uses: christian-korneck/update-container-description-action@v1
-        env:
-          DOCKER_USER: ${{ secrets.HARBOR_3KEY_USERNAME }}
-          DOCKER_PASS: ${{ secrets.HARBOR_3KEY_PASSWORD }}
-        with:
-          destination_container_repo: harbor.3key.company/czertainly/czertainly-core
-          provider: harbor2
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
