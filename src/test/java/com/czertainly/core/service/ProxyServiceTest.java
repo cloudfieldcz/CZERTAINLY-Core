@@ -48,7 +48,7 @@ class ProxyServiceTest extends BaseSpringBootTest {
         .build();
 
     @DynamicPropertySource
-    static void githubTestProperties(@NonNull DynamicPropertyRegistry registry) {
+    static void proxyProvisioningTestProperties(@NonNull DynamicPropertyRegistry registry) {
         registry.add("proxy.provisioning.api.url", () -> wireMockServer.baseUrl());
     }
 
