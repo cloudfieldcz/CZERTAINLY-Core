@@ -15,17 +15,42 @@ import com.czertainly.core.dao.repository.ProxyRepository;
 import com.czertainly.core.security.authz.SecuredUUID;
 import com.czertainly.core.security.authz.SecurityFilter;
 import com.czertainly.core.util.BaseSpringBootTest;
+import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.NonNull;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 import java.util.List;
 import java.util.Optional;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.*;
+import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+
 class ProxyServiceTest extends BaseSpringBootTest {
 
     private static final String PROXY_NAME = "testProxy1";
+    private static final String INSTALLATION_INSTRUCTIONS_JSON = """
+        {
+            "command": {
+                "shell": "helm install test-proxy oci://registry.example.com/charts/proxy --version 1.0.0 --namespace default --wait --atomic --set config.key=value"
+            }
+        }
+        """;
+
+    @RegisterExtension
+    static WireMockExtension wireMockServer = WireMockExtension.newInstance()
+        .options(wireMockConfig().dynamicPort())
+        .build();
+
+    @DynamicPropertySource
+    static void githubTestProperties(@NonNull DynamicPropertyRegistry registry) {
+        registry.add("proxy.provisioning.api.url", () -> wireMockServer.baseUrl());
+    }
 
     @Autowired
     private ProxyService proxyService;
@@ -94,6 +119,19 @@ class ProxyServiceTest extends BaseSpringBootTest {
 
     @Test
     void testAddProxy() throws AlreadyExistException {
+        // Stub for POST /api/v1/proxies
+        wireMockServer.stubFor(post(urlPathEqualTo("/api/v1/proxies"))
+            .willReturn(aResponse()
+                .withStatus(201)));
+
+        // Stub for GET /api/v1/proxies/{code}/installation?format=helm
+        wireMockServer.stubFor(get(urlPathMatching("/api/v1/proxies/.*/installation"))
+            .withQueryParam("format", equalTo("helm"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(INSTALLATION_INSTRUCTIONS_JSON)));
+
         ProxyRequestDto request = new ProxyRequestDto();
         request.setName("testProxy2");
         request.setDescription("Test Proxy 2");
@@ -101,6 +139,8 @@ class ProxyServiceTest extends BaseSpringBootTest {
         ProxyDto dto = proxyService.createProxy(request);
         Assertions.assertNotNull(dto);
         Assertions.assertEquals(request.getName(), dto.getName());
+        Assertions.assertNotNull(dto.getInstallationInstructions());
+        Assertions.assertTrue(dto.getInstallationInstructions().contains("helm install"));
     }
 
     @Test
@@ -137,6 +177,10 @@ class ProxyServiceTest extends BaseSpringBootTest {
 
     @Test
     void testDeleteProxy() throws NotFoundException {
+        wireMockServer.stubFor(delete(urlPathEqualTo("/api/v1/proxies/TEST_PROXY_DELETE"))
+            .willReturn(aResponse()
+                .withStatus(204)));
+
         Proxy proxyToDelete = new Proxy();
         proxyToDelete.setName("testProxyDelete");
         proxyToDelete.setDescription("Test Proxy to Delete");
@@ -177,5 +221,45 @@ class ProxyServiceTest extends BaseSpringBootTest {
     void testGetObjectsForResource() {
         List<NameAndUuidDto> dtos = proxyService.listResourceObjects(SecurityFilter.create());
         Assertions.assertEquals(1, dtos.size());
+    }
+
+    @Test
+    void testGetProxy_waitingForInstallation() throws NotFoundException {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/v1/proxies/WAITING_PROXY/installation"))
+            .withQueryParam("format", equalTo("helm"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(INSTALLATION_INSTRUCTIONS_JSON)));
+
+        Proxy waitingProxy = new Proxy();
+        waitingProxy.setName("waitingProxy");
+        waitingProxy.setDescription("Waiting Proxy");
+        waitingProxy.setCode("WAITING_PROXY");
+        waitingProxy.setStatus(ProxyStatus.WAITING_FOR_INSTALLATION);
+        waitingProxy = proxyRepository.save(waitingProxy);
+
+        ProxyDto dto = proxyService.getProxy(waitingProxy.getSecuredUuid());
+
+        Assertions.assertNotNull(dto);
+        Assertions.assertNotNull(dto.getInstallationInstructions());
+        Assertions.assertTrue(dto.getInstallationInstructions().contains("helm install"));
+    }
+
+    @Test
+    void testGetInstallationInstructions() throws NotFoundException {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/v1/proxies/TEST_PROXY_1/installation"))
+            .withQueryParam("format", equalTo("helm"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody(INSTALLATION_INSTRUCTIONS_JSON)));
+
+        ProxyDto dto = proxyService.getInstallationInstructions(proxy.getSecuredUuid());
+
+        Assertions.assertNotNull(dto);
+        Assertions.assertNotNull(dto.getInstallationInstructions());
+        Assertions.assertTrue(dto.getInstallationInstructions().contains("helm install"));
+        Assertions.assertTrue(dto.getInstallationInstructions().contains("oci://registry.example.com/charts/proxy"));
     }
 }
