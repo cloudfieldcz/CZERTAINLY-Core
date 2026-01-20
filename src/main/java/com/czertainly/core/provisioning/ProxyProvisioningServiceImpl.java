@@ -47,7 +47,7 @@ public class ProxyProvisioningServiceImpl implements ProxyProvisioningService {
         try {
             proxyProvisioningApiClient.decommissionProxy(proxyCode);
         } catch (Exception e) {
-            throw new ProxyProvisioningException("Failed to delete proxy " + proxyCode, e);
+            throw new ProxyProvisioningException("Failed to decommission proxy " + proxyCode, e);
         }
     }
 }
