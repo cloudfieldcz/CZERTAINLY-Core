@@ -34,8 +34,8 @@ public class ProxyProvisioningApiConfig {
     }
 
     @Bean
-    public ProxyProvisioningApiClient provisioningApiClient(RestClient pkcs11RestClient) {
-        HttpServiceProxyFactory httpServiceProxyFactory = HttpServiceProxyFactory.builderFor(RestClientAdapter.create(pkcs11RestClient))
+    public ProxyProvisioningApiClient provisioningApiClient(RestClient provisioningRestClient) {
+        HttpServiceProxyFactory httpServiceProxyFactory = HttpServiceProxyFactory.builderFor(RestClientAdapter.create(provisioningRestClient))
             .build();
         return httpServiceProxyFactory.createClient(ProxyProvisioningApiClient.class);
     }
