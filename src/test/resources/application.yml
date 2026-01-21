@@ -133,7 +133,7 @@ proxy:
       read-timeout: 1s
       installation-format: helm
       retry:
-        max-attempts: 3
-        delay: 1000
-        max-delay: 5000
+        max-attempts: 2
+        delay: 500
+        max-delay: 1000
         multiplier: 2

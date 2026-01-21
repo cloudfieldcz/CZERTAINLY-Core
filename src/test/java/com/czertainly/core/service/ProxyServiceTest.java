@@ -12,6 +12,7 @@ import com.czertainly.core.dao.entity.Connector;
 import com.czertainly.core.dao.entity.Proxy;
 import com.czertainly.core.dao.repository.ConnectorRepository;
 import com.czertainly.core.dao.repository.ProxyRepository;
+import com.czertainly.core.provisioning.ProxyProvisioningException;
 import com.czertainly.core.security.authz.SecuredUUID;
 import com.czertainly.core.security.authz.SecurityFilter;
 import com.czertainly.core.util.BaseSpringBootTest;
@@ -261,5 +262,96 @@ class ProxyServiceTest extends BaseSpringBootTest {
         Assertions.assertNotNull(dto.getInstallationInstructions());
         Assertions.assertTrue(dto.getInstallationInstructions().contains("helm install"));
         Assertions.assertTrue(dto.getInstallationInstructions().contains("oci://registry.example.com/charts/proxy"));
+    }
+
+    @Test
+    void testCreateProxy_provisioningApiFails() {
+        wireMockServer.stubFor(post(urlPathEqualTo("/api/v1/proxies"))
+            .willReturn(aResponse()
+                .withStatus(500)
+                .withBody("Internal Server Error")));
+
+        ProxyRequestDto request = new ProxyRequestDto();
+        request.setName("failingProxy");
+        request.setDescription("Proxy that fails to provision");
+
+        Assertions.assertThrows(ProxyProvisioningException.class, () -> proxyService.createProxy(request));
+
+        // Verify proxy was not persisted due to transaction rollback
+        Assertions.assertTrue(proxyRepository.findByName("failingProxy").isEmpty());
+    }
+
+    @Test
+    void testCreateProxy_getInstallationInstructionsFails() {
+        wireMockServer.stubFor(post(urlPathEqualTo("/api/v1/proxies"))
+            .willReturn(aResponse()
+                .withStatus(201)));
+
+        wireMockServer.stubFor(get(urlPathMatching("/api/v1/proxies/.*/installation"))
+            .withQueryParam("format", equalTo("helm"))
+            .willReturn(aResponse()
+                .withStatus(503)
+                .withBody("Service Unavailable")));
+
+        ProxyRequestDto request = new ProxyRequestDto();
+        request.setName("failingProxy2");
+        request.setDescription("Proxy that fails to get installation instructions");
+
+        Assertions.assertThrows(ProxyProvisioningException.class, () -> proxyService.createProxy(request));
+
+        // Verify proxy was not persisted due to transaction rollback
+        Assertions.assertTrue(proxyRepository.findByName("failingProxy2").isEmpty());
+    }
+
+    @Test
+    void testDeleteProxy_decommissioningFails_rollbacksTransaction() {
+        wireMockServer.stubFor(delete(urlPathEqualTo("/api/v1/proxies/DECOMMISSION_FAIL"))
+            .willReturn(aResponse()
+                .withStatus(500)
+                .withBody("Internal Server Error")));
+
+        Proxy proxyToDelete = new Proxy();
+        proxyToDelete.setName("decommissionFailProxy");
+        proxyToDelete.setDescription("Proxy that fails to decommission");
+        proxyToDelete.setCode("DECOMMISSION_FAIL");
+        proxyToDelete.setStatus(ProxyStatus.CONNECTED);
+        proxyToDelete = proxyRepository.save(proxyToDelete);
+
+        SecuredUUID proxyUuid = proxyToDelete.getSecuredUuid();
+        Assertions.assertThrows(ProxyProvisioningException.class, () -> proxyService.deleteProxy(proxyUuid));
+
+        // Verify proxy still exists due to transaction rollback
+        Assertions.assertTrue(proxyRepository.findByUuid(proxyToDelete.getUuid()).isPresent());
+    }
+
+    @Test
+    void testGetProxy_waitingForInstallation_apiFails() {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/v1/proxies/WAITING_FAIL/installation"))
+            .withQueryParam("format", equalTo("helm"))
+            .willReturn(aResponse()
+                .withStatus(500)
+                .withBody("Internal Server Error")));
+
+        Proxy waitingProxy = new Proxy();
+        waitingProxy.setName("waitingFailProxy");
+        waitingProxy.setDescription("Waiting Proxy that fails");
+        waitingProxy.setCode("WAITING_FAIL");
+        waitingProxy.setStatus(ProxyStatus.WAITING_FOR_INSTALLATION);
+        waitingProxy = proxyRepository.save(waitingProxy);
+
+        SecuredUUID proxyUuid = waitingProxy.getSecuredUuid();
+        Assertions.assertThrows(ProxyProvisioningException.class, () -> proxyService.getProxy(proxyUuid));
+    }
+
+    @Test
+    void testGetInstallationInstructions_apiFails() {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/v1/proxies/TEST_PROXY_1/installation"))
+            .withQueryParam("format", equalTo("helm"))
+            .willReturn(aResponse()
+                .withStatus(500)
+                .withBody("Internal Server Error")));
+
+        Assertions.assertThrows(ProxyProvisioningException.class,
+            () -> proxyService.getInstallationInstructions(proxy.getSecuredUuid()));
     }
 }

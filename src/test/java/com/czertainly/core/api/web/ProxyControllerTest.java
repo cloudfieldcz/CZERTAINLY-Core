@@ -36,7 +36,9 @@ class ProxyControllerTest extends BaseSpringBootTest {
 
     @BeforeEach
     void setUp() {
-        when(proxyProvisioningService.provisionProxy(anyString())).thenReturn("helm install test-proxy ...");
+        String command = "helm install test-proxy ...";
+        when(proxyProvisioningService.provisionProxy(anyString())).thenReturn(command);
+        when(proxyProvisioningService.getProxyInstallationInstructions(anyString())).thenReturn(command);
         doNothing().when(proxyProvisioningService).decommissionProxy(anyString());
     }
 
