@@ -63,8 +63,12 @@ public class ProxyServiceImpl implements ProxyService {
 
         // If the proxy is waiting for installation, fetch the installation instructions
         if (ProxyStatus.WAITING_FOR_INSTALLATION.equals(proxy.getStatus())) {
-            String installInstructions = proxyProvisioningService.getProxyInstallationInstructions(proxy.getCode());
-            dto.setInstallationInstructions(installInstructions);
+            try {
+                String installInstructions = proxyProvisioningService.getProxyInstallationInstructions(proxy.getCode());
+                dto.setInstallationInstructions(installInstructions);
+            } catch (ProxyProvisioningException e) {
+                logger.warn("Failed to fetch installation instructions for proxy with code {}", proxy.getCode(), e);
+            }
         }
 
         return dto;
