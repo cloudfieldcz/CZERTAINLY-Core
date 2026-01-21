@@ -325,7 +325,7 @@ class ProxyServiceTest extends BaseSpringBootTest {
     }
 
     @Test
-    void testGetProxy_waitingForInstallation_apiFails() {
+    void testGetProxy_waitingForInstallation_apiFails() throws NotFoundException {
         wireMockServer.stubFor(get(urlPathEqualTo("/api/v1/proxies/WAITING_FAIL/installation"))
             .withQueryParam("format", equalTo("helm"))
             .willReturn(aResponse()
@@ -340,7 +340,9 @@ class ProxyServiceTest extends BaseSpringBootTest {
         waitingProxy = proxyRepository.save(waitingProxy);
 
         SecuredUUID proxyUuid = waitingProxy.getSecuredUuid();
-        Assertions.assertThrows(ProxyProvisioningException.class, () -> proxyService.getProxy(proxyUuid));
+        ProxyDto dto = proxyService.getProxy(proxyUuid);
+        Assertions.assertNotNull(dto);
+        Assertions.assertNull(dto.getInstallationInstructions());
     }
 
     @Test

@@ -23,6 +23,8 @@ public class ProxyProvisioningServiceImpl implements ProxyProvisioningService {
         try {
             proxyProvisioningApiClient.provisionProxy(new ProxyProvisioningRequestDTO(proxyCode));
             return getProxyInstallationInstructions(proxyCode);
+        } catch (ProxyProvisioningException e) {
+            throw e;
         } catch (Exception e) {
             throw new ProxyProvisioningException("Failed to provision proxy " + proxyCode, e);
         }
