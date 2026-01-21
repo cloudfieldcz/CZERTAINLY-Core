@@ -150,7 +150,6 @@ class SecurityConfigTest extends BaseSpringBootTestNoAuth {
     }
 
     @Test
-    @Disabled
     void testOauth2Login() throws Exception {
         String userUuid = UUID.randomUUID().toString();
         String username = "login-user";
@@ -183,7 +182,6 @@ class SecurityConfigTest extends BaseSpringBootTestNoAuth {
     }
 
     @Test
-    @Disabled
     void testOAuth2LoginRefreshingToken() throws Exception {
         cacheProviderSettings(null);
         String oauth2Token = OAuth2TestUtil.createJwtTokenValue(privateKey, null, null, null, "oldUsername");
