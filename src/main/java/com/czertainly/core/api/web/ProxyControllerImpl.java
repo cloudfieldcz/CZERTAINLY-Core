@@ -28,6 +28,9 @@ import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * REST controller implementation for proxy management operations.
+ */
 @RestController
 @RequiredArgsConstructor
 public class ProxyControllerImpl implements ProxyController {

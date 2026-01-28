@@ -24,6 +24,9 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import java.net.URI;
 import java.util.List;
 
+/**
+ * REST controller implementation for trusted certificate management operations.
+ */
 @RestController
 @RequiredArgsConstructor
 public class TrustedCertificateControllerImpl implements TrustedCertificateController {

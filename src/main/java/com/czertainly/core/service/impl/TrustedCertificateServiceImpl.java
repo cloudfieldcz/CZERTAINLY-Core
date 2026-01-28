@@ -22,6 +22,10 @@ import org.springframework.web.client.HttpClientErrorException;
 
 import java.util.List;
 
+/**
+ * Implementation of {@link TrustedCertificateService} for managing trusted certificates
+ * via the external provisioning API.
+ */
 @Service(Resource.Codes.TRUSTED_CERTIFICATE)
 @Transactional
 @RequiredArgsConstructor
@@ -37,9 +41,11 @@ public class TrustedCertificateServiceImpl implements TrustedCertificateService 
         logger.debug("Listing trusted certificates");
         try {
             List<TrustedCertificateProvisioningDTO> provisioningDtos = trustedCertificateProvisioningApiClient.listTrustedCertificates();
-            return provisioningDtos.stream()
+            List<TrustedCertificateDto> result = provisioningDtos.stream()
                     .map(this::mapToDto)
                     .toList();
+            logger.debug("Found {} trusted certificates", result.size());
+            return result;
         } catch (Exception e) {
             throw new ProvisioningException("Failed to list trusted certificates", e);
         }
@@ -66,6 +72,7 @@ public class TrustedCertificateServiceImpl implements TrustedCertificateService 
         try {
             TrustedCertificateProvisioningRequestDTO provisioningRequest = new TrustedCertificateProvisioningRequestDTO(request.getCertificateContent());
             TrustedCertificateProvisioningDTO provisioningDto = trustedCertificateProvisioningApiClient.createTrustedCertificate(provisioningRequest);
+            logger.info("Trusted certificate created successfully: {}", provisioningDto.uuid());
             return mapToDto(provisioningDto);
         } catch (Exception e) {
             throw new ProvisioningException("Failed to create trusted certificate", e);
@@ -78,6 +85,7 @@ public class TrustedCertificateServiceImpl implements TrustedCertificateService 
         logger.info("Deleting trusted certificate with UUID: {}", uuid);
         try {
             trustedCertificateProvisioningApiClient.deleteTrustedCertificate(uuid.toString());
+            logger.info("Trusted certificate deleted successfully: {}", uuid);
         } catch (HttpClientErrorException.NotFound e) {
             throw new NotFoundException("Trusted certificate", uuid.toString());
         } catch (Exception e) {

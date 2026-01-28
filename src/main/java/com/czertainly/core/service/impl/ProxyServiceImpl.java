@@ -35,6 +35,9 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Implementation of {@link ProxyService} for managing proxy entities.
+ */
 @Service(Resource.Codes.PROXY)
 @Transactional
 @RequiredArgsConstructor
@@ -48,16 +51,19 @@ public class ProxyServiceImpl implements ProxyService {
     @Override
     @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.LIST)
     public List<ProxyDto> listProxies(SecurityFilter filter, Optional<ProxyStatus> status) {
+        logger.debug("Listing proxies with status filter: {}", status.orElse(null));
         List<ProxyDto> proxies = proxyRepository.findUsingSecurityFilter(filter).stream().map(Proxy::mapToDto).toList();
         if (status.isPresent()) {
             proxies = filterByStatus(proxies, status.get());
         }
+        logger.debug("Found {} proxies", proxies.size());
         return proxies;
     }
 
     @Override
     @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.DETAIL)
     public ProxyDto getProxy(SecuredUUID uuid) throws NotFoundException {
+        logger.debug("Getting proxy with UUID: {}", uuid);
         Proxy proxy = getProxyEntity(uuid);
         ProxyDto dto = proxy.mapToDto();
 
@@ -84,6 +90,8 @@ public class ProxyServiceImpl implements ProxyService {
     @Override
     @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.CREATE)
     public ProxyDto createProxy(ProxyRequestDto request) throws AlreadyExistException {
+        logger.info("Creating proxy with name: {}", request.getName());
+
         if (StringUtils.isBlank(request.getName())) {
             throw new ValidationException(ValidationError.create("name must not be empty"));
         }
@@ -93,6 +101,7 @@ public class ProxyServiceImpl implements ProxyService {
         }
 
         String proxyCode = proxyCodeHelper.calculateCode(request.getName());
+        logger.debug("Generated proxy code: {}", proxyCode);
 
         Proxy proxy = new Proxy();
         proxy.setName(request.getName());
@@ -103,16 +112,20 @@ public class ProxyServiceImpl implements ProxyService {
         proxy.setStatus(ProxyStatus.WAITING_FOR_INSTALLATION);
 
         proxyRepository.save(proxy);
+        logger.debug("Proxy saved with UUID: {}", proxy.getUuid());
 
         // Provision the proxy using the provisioning service
         proxyProvisioningService.provisionProxy(proxyCode);
 
+        logger.info("Proxy created successfully: {} ({})", proxy.getName(), proxy.getUuid());
         return proxy.mapToDto();
     }
 
     @Override
     @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.UPDATE)
     public ProxyDto editProxy(SecuredUUID uuid, ProxyUpdateRequestDto request) throws NotFoundException {
+        logger.info("Editing proxy with UUID: {}", uuid);
+
         Proxy proxy = proxyRepository.findByUuid(uuid)
             .orElseThrow(() -> new NotFoundException(Proxy.class, uuid));
 
@@ -122,18 +135,26 @@ public class ProxyServiceImpl implements ProxyService {
 
         proxyRepository.save(proxy);
 
+        logger.info("Proxy updated successfully: {} ({})", proxy.getName(), proxy.getUuid());
         return proxy.mapToDto();
     }
 
     @Override
     @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.DELETE)
     public void deleteProxy(SecuredUUID uuid) throws NotFoundException {
+        logger.info("Deleting proxy with UUID: {}", uuid);
+
         Proxy proxy = proxyRepository.findByUuid(uuid)
             .orElseThrow(() -> new NotFoundException(Proxy.class, uuid));
 
+        String proxyName = proxy.getName();
+        String proxyCode = proxy.getCode();
+
         deleteProxy(proxy);
 
-        proxyProvisioningService.decommissionProxy(proxy.getCode());
+        proxyProvisioningService.decommissionProxy(proxyCode);
+
+        logger.info("Proxy deleted successfully: {} ({})", proxyName, uuid);
     }
 
     private void deleteProxy(Proxy proxy) {
@@ -152,6 +173,8 @@ public class ProxyServiceImpl implements ProxyService {
     @Override
     @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.DETAIL)
     public ProxyDto getInstallationInstructions(SecuredUUID uuid) throws NotFoundException {
+        logger.debug("Getting installation instructions for proxy with UUID: {}", uuid);
+
         Proxy proxy = getProxyEntity(uuid);
 
         String installInstructions = proxyProvisioningService.getProxyInstallationInstructions(proxy.getCode());

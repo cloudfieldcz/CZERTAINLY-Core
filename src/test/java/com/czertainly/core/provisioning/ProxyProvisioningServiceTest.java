@@ -42,13 +42,6 @@ class ProxyProvisioningServiceTest extends BaseSpringBootTest {
         wireMockServer.stubFor(post(urlPathEqualTo("/api/v1/proxies"))
             .willReturn(aResponse().withStatus(201)));
 
-        wireMockServer.stubFor(get(urlPathEqualTo("/api/v1/proxies/" + PROXY_CODE + "/installation"))
-            .withQueryParam("format", equalTo("helm"))
-            .willReturn(aResponse()
-                .withStatus(200)
-                .withHeader("Content-Type", "application/json")
-                .withBody(INSTALLATION_INSTRUCTIONS_JSON)));
-
         proxyProvisioningService.provisionProxy(PROXY_CODE);
 
         wireMockServer.verify(postRequestedFor(urlPathEqualTo("/api/v1/proxies"))
