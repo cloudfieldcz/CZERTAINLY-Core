@@ -28,7 +28,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            czertainlytestswcacr.azurecr.io/czertainly-core
+            ilmtestswcacr.azurecr.io/czertainly-core
           tags: |
             type=ref,event=tag
             type=raw,value=develop-latest
