@@ -48,7 +48,7 @@ public class ProxyControllerImpl implements ProxyController {
     @AuthEndpoint(resourceName = Resource.PROXY)
     @AuditLogged(module = Module.CORE, resource = Resource.PROXY, operation = Operation.LIST)
     public List<ProxyListDto> listProxys(
-        @RequestParam(required = false) ProxyStatus status) throws NotFoundException {
+        @RequestParam(required = false) ProxyStatus status) {
         return proxyService.listProxies(SecurityFilter.create(), Optional.ofNullable(status));
     }
 

@@ -25,9 +25,9 @@ public interface ProxyService extends ResourceExtensionService {
      *
      * @param filter security filter for access control
      * @param status optional status to filter proxies
-     * @return list of proxy DTOs
+     * @return list of proxy listing DTOs ({@link ProxyListDto})
      */
-    List<ProxyListDto> listProxies(SecurityFilter filter, Optional<ProxyStatus> status) throws NotFoundException;
+    List<ProxyListDto> listProxies(SecurityFilter filter, Optional<ProxyStatus> status);
 
     /**
      * Retrieves a proxy by its UUID.
