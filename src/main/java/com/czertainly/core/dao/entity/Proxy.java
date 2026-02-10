@@ -2,6 +2,7 @@ package com.czertainly.core.dao.entity;
 
 import com.czertainly.api.model.common.NameAndUuidDto;
 import com.czertainly.api.model.core.proxy.ProxyDto;
+import com.czertainly.api.model.core.proxy.ProxyListDto;
 import com.czertainly.api.model.core.proxy.ProxyStatus;
 import com.czertainly.core.util.DtoMapper;
 import com.czertainly.core.util.ObjectAccessControlMapper;
@@ -77,6 +78,16 @@ public class Proxy extends UniquelyIdentifiedAndAudited implements Serializable,
         dto.setStatus(this.status);
         dto.setLastActivity(this.lastActivity);
         // Don't set connectors to avoid circular reference
+        return dto;
+    }
+
+    public ProxyListDto mapToListDto() {
+        ProxyListDto dto = new ProxyListDto();
+        dto.setUuid(this.uuid.toString());
+        dto.setName(this.name);
+        dto.setDescription(this.description);
+        dto.setStatus(this.status);
+        dto.setLastActivity(this.lastActivity);
         return dto;
     }
 
