@@ -18,8 +18,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.annotation.Transactional;
 
-import static org.mockito.Mockito.when;
-
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -28,7 +26,8 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.UUID;
 
-@Transactional
+import static org.mockito.Mockito.when;
+
 @ExtendWith(MockitoExtension.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class MigrateToComplianceProfilesV2Test extends BaseSpringBootTest {
