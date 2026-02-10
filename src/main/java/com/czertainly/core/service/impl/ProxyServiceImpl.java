@@ -9,13 +9,14 @@ import com.czertainly.api.model.client.proxy.ProxyUpdateRequestDto;
 import com.czertainly.api.model.common.NameAndUuidDto;
 import com.czertainly.api.model.core.auth.Resource;
 import com.czertainly.api.model.core.proxy.ProxyDto;
+import com.czertainly.api.model.core.proxy.ProxyInstallInstructionsDto;
+import com.czertainly.api.model.core.proxy.ProxyListDto;
 import com.czertainly.api.model.core.proxy.ProxyStatus;
 import com.czertainly.core.dao.entity.Connector;
 import com.czertainly.core.dao.entity.Proxy;
 import com.czertainly.core.dao.entity.Proxy_;
 import com.czertainly.core.dao.repository.ProxyRepository;
 import com.czertainly.core.model.auth.ResourceAction;
-import com.czertainly.core.provisioning.ProvisioningException;
 import com.czertainly.core.provisioning.ProxyProvisioningService;
 import com.czertainly.core.security.authz.ExternalAuthorization;
 import com.czertainly.core.security.authz.SecuredUUID;
@@ -50,9 +51,9 @@ public class ProxyServiceImpl implements ProxyService {
 
     @Override
     @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.LIST)
-    public List<ProxyDto> listProxies(SecurityFilter filter, Optional<ProxyStatus> status) {
+    public List<ProxyListDto> listProxies(SecurityFilter filter, Optional<ProxyStatus> status) {
         logger.debug("Listing proxies with status filter: {}", status.orElse(null));
-        List<ProxyDto> proxies = proxyRepository.findUsingSecurityFilter(filter).stream().map(Proxy::mapToDto).toList();
+        List<ProxyListDto> proxies = proxyRepository.findUsingSecurityFilter(filter).stream().map(Proxy::mapToListDto).toList();
         if (status.isPresent()) {
             proxies = filterByStatus(proxies, status.get());
         }
@@ -65,19 +66,8 @@ public class ProxyServiceImpl implements ProxyService {
     public ProxyDto getProxy(SecuredUUID uuid) throws NotFoundException {
         logger.debug("Getting proxy with UUID: {}", uuid);
         Proxy proxy = getProxyEntity(uuid);
-        ProxyDto dto = proxy.mapToDto();
 
-        // If the proxy is waiting for installation, fetch the installation instructions
-        if (ProxyStatus.WAITING_FOR_INSTALLATION.equals(proxy.getStatus())) {
-            try {
-                String installInstructions = proxyProvisioningService.getProxyInstallationInstructions(proxy.getCode());
-                dto.setInstallationInstructions(installInstructions);
-            } catch (ProvisioningException e) {
-                logger.warn("Failed to fetch installation instructions for proxy with code {}", proxy.getCode(), e);
-            }
-        }
-
-        return dto;
+        return proxy.mapToDto();
     }
 
     @Override
@@ -171,18 +161,15 @@ public class ProxyServiceImpl implements ProxyService {
     }
 
     @Override
-    @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.DETAIL)
-    public ProxyDto getInstallationInstructions(SecuredUUID uuid) throws NotFoundException {
+    @ExternalAuthorization(resource = Resource.PROXY, action = ResourceAction.GET_PROXY_INSTALLATION)
+    public ProxyInstallInstructionsDto getInstallationInstructions(SecuredUUID uuid) throws NotFoundException {
         logger.debug("Getting installation instructions for proxy with UUID: {}", uuid);
 
         Proxy proxy = getProxyEntity(uuid);
 
         String installInstructions = proxyProvisioningService.getProxyInstallationInstructions(proxy.getCode());
 
-        ProxyDto dto = proxy.mapToDto();
-        dto.setInstallationInstructions(installInstructions);
-
-        return dto;
+        return new ProxyInstallInstructionsDto(uuid.toString(), installInstructions);
     }
 
     @Override
@@ -203,7 +190,7 @@ public class ProxyServiceImpl implements ProxyService {
         // Since there are is no parent to the Proxy, exclusive parent permission evaluation need not be done
     }
 
-    private List<ProxyDto> filterByStatus(List<ProxyDto> proxies, ProxyStatus status) {
+    private List<ProxyListDto> filterByStatus(List<ProxyListDto> proxies, ProxyStatus status) {
         return proxies.stream()
             .filter(proxyDto -> proxyDto.getStatus().equals(status))
             .toList();

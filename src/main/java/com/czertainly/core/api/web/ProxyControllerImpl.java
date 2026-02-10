@@ -10,6 +10,8 @@ import com.czertainly.api.model.core.auth.Resource;
 import com.czertainly.api.model.core.logging.enums.Module;
 import com.czertainly.api.model.core.logging.enums.Operation;
 import com.czertainly.api.model.core.proxy.ProxyDto;
+import com.czertainly.api.model.core.proxy.ProxyInstallInstructionsDto;
+import com.czertainly.api.model.core.proxy.ProxyListDto;
 import com.czertainly.api.model.core.proxy.ProxyStatus;
 import com.czertainly.core.aop.AuditLogged;
 import com.czertainly.core.auth.AuthEndpoint;
@@ -45,8 +47,8 @@ public class ProxyControllerImpl implements ProxyController {
     @Override
     @AuthEndpoint(resourceName = Resource.PROXY)
     @AuditLogged(module = Module.CORE, resource = Resource.PROXY, operation = Operation.LIST)
-    public List<ProxyDto> listProxys(
-        @RequestParam(required = false) ProxyStatus status) throws NotFoundException {
+    public List<ProxyListDto> listProxys(
+        @RequestParam(required = false) ProxyStatus status) {
         return proxyService.listProxies(SecurityFilter.create(), Optional.ofNullable(status));
     }
 
@@ -82,8 +84,8 @@ public class ProxyControllerImpl implements ProxyController {
     }
 
     @Override
-    @AuditLogged(module = Module.CORE, resource = Resource.PROXY, operation = Operation.DETAIL)
-    public ProxyDto getInstallationInstructions(@LogResource(uuid = true) @PathVariable String uuid) throws NotFoundException {
+    @AuditLogged(module = Module.CORE, resource = Resource.PROXY, operation = Operation.GET_PROXY_INSTALLATION)
+    public ProxyInstallInstructionsDto getInstallationInstructions(@LogResource(uuid = true) @PathVariable String uuid) throws NotFoundException {
         return proxyService.getInstallationInstructions(SecuredUUID.fromString(uuid));
     }
 }

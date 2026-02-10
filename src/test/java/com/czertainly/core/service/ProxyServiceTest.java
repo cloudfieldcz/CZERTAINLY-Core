@@ -7,6 +7,8 @@ import com.czertainly.api.model.client.proxy.ProxyRequestDto;
 import com.czertainly.api.model.client.proxy.ProxyUpdateRequestDto;
 import com.czertainly.api.model.common.NameAndUuidDto;
 import com.czertainly.api.model.core.proxy.ProxyDto;
+import com.czertainly.api.model.core.proxy.ProxyInstallInstructionsDto;
+import com.czertainly.api.model.core.proxy.ProxyListDto;
 import com.czertainly.api.model.core.proxy.ProxyStatus;
 import com.czertainly.core.dao.entity.Connector;
 import com.czertainly.core.dao.entity.Proxy;
@@ -76,7 +78,7 @@ class ProxyServiceTest extends BaseSpringBootTest {
 
     @Test
     void testListProxies() throws NotFoundException {
-        List<ProxyDto> proxies = proxyService.listProxies(SecurityFilter.create(), Optional.empty());
+        List<ProxyListDto> proxies = proxyService.listProxies(SecurityFilter.create(), Optional.empty());
         Assertions.assertNotNull(proxies);
         Assertions.assertFalse(proxies.isEmpty());
         Assertions.assertEquals(1, proxies.size());
@@ -85,7 +87,7 @@ class ProxyServiceTest extends BaseSpringBootTest {
 
     @Test
     void testListProxiesByStatus() throws NotFoundException {
-        List<ProxyDto> proxies = proxyService.listProxies(
+        List<ProxyListDto> proxies = proxyService.listProxies(
             SecurityFilter.create(),
             Optional.of(ProxyStatus.CONNECTED)
         );
@@ -97,7 +99,7 @@ class ProxyServiceTest extends BaseSpringBootTest {
 
     @Test
     void testListProxiesByStatus_notFound() throws NotFoundException {
-        List<ProxyDto> proxies = proxyService.listProxies(
+        List<ProxyListDto> proxies = proxyService.listProxies(
             SecurityFilter.create(),
             Optional.of(ProxyStatus.FAILED)
         );
@@ -223,29 +225,6 @@ class ProxyServiceTest extends BaseSpringBootTest {
     }
 
     @Test
-    void testGetProxy_waitingForInstallation() throws NotFoundException {
-        wireMockServer.stubFor(get(urlPathEqualTo("/api/v1/proxies/WAITING_PROXY/installation"))
-            .withQueryParam("format", equalTo("helm"))
-            .willReturn(aResponse()
-                .withStatus(200)
-                .withHeader("Content-Type", "application/json")
-                .withBody(INSTALLATION_INSTRUCTIONS_JSON)));
-
-        Proxy waitingProxy = new Proxy();
-        waitingProxy.setName("waitingProxy");
-        waitingProxy.setDescription("Waiting Proxy");
-        waitingProxy.setCode("WAITING_PROXY");
-        waitingProxy.setStatus(ProxyStatus.WAITING_FOR_INSTALLATION);
-        waitingProxy = proxyRepository.save(waitingProxy);
-
-        ProxyDto dto = proxyService.getProxy(waitingProxy.getSecuredUuid());
-
-        Assertions.assertNotNull(dto);
-        Assertions.assertNotNull(dto.getInstallationInstructions());
-        Assertions.assertTrue(dto.getInstallationInstructions().contains("helm install"));
-    }
-
-    @Test
     void testGetInstallationInstructions() throws NotFoundException {
         wireMockServer.stubFor(get(urlPathEqualTo("/api/v1/proxies/TEST_PROXY_1/installation"))
             .withQueryParam("format", equalTo("helm"))
@@ -254,7 +233,7 @@ class ProxyServiceTest extends BaseSpringBootTest {
                 .withHeader("Content-Type", "application/json")
                 .withBody(INSTALLATION_INSTRUCTIONS_JSON)));
 
-        ProxyDto dto = proxyService.getInstallationInstructions(proxy.getSecuredUuid());
+        ProxyInstallInstructionsDto dto = proxyService.getInstallationInstructions(proxy.getSecuredUuid());
 
         Assertions.assertNotNull(dto);
         Assertions.assertNotNull(dto.getInstallationInstructions());
@@ -298,27 +277,6 @@ class ProxyServiceTest extends BaseSpringBootTest {
 
         // Verify proxy still exists due to transaction rollback
         Assertions.assertTrue(proxyRepository.findByUuid(SecuredUUID.fromUUID(proxyToDelete.getUuid())).isPresent());
-    }
-
-    @Test
-    void testGetProxy_waitingForInstallation_apiFails() throws NotFoundException {
-        wireMockServer.stubFor(get(urlPathEqualTo("/api/v1/proxies/WAITING_FAIL/installation"))
-            .withQueryParam("format", equalTo("helm"))
-            .willReturn(aResponse()
-                .withStatus(500)
-                .withBody("Internal Server Error")));
-
-        Proxy waitingProxy = new Proxy();
-        waitingProxy.setName("waitingFailProxy");
-        waitingProxy.setDescription("Waiting Proxy that fails");
-        waitingProxy.setCode("WAITING_FAIL");
-        waitingProxy.setStatus(ProxyStatus.WAITING_FOR_INSTALLATION);
-        waitingProxy = proxyRepository.save(waitingProxy);
-
-        SecuredUUID proxyUuid = waitingProxy.getSecuredUuid();
-        ProxyDto dto = proxyService.getProxy(proxyUuid);
-        Assertions.assertNotNull(dto);
-        Assertions.assertNull(dto.getInstallationInstructions());
     }
 
     @Test

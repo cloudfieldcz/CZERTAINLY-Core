@@ -5,6 +5,8 @@ import com.czertainly.api.exception.NotFoundException;
 import com.czertainly.api.model.client.proxy.ProxyRequestDto;
 import com.czertainly.api.model.client.proxy.ProxyUpdateRequestDto;
 import com.czertainly.api.model.core.proxy.ProxyDto;
+import com.czertainly.api.model.core.proxy.ProxyInstallInstructionsDto;
+import com.czertainly.api.model.core.proxy.ProxyListDto;
 import com.czertainly.api.model.core.proxy.ProxyStatus;
 import com.czertainly.core.dao.entity.Proxy;
 import com.czertainly.core.security.authz.SecuredUUID;
@@ -23,9 +25,9 @@ public interface ProxyService extends ResourceExtensionService {
      *
      * @param filter security filter for access control
      * @param status optional status to filter proxies
-     * @return list of proxy DTOs
+     * @return list of proxy listing DTOs ({@link ProxyListDto})
      */
-    List<ProxyDto> listProxies(SecurityFilter filter, Optional<ProxyStatus> status) throws NotFoundException;
+    List<ProxyListDto> listProxies(SecurityFilter filter, Optional<ProxyStatus> status);
 
     /**
      * Retrieves a proxy by its UUID.
@@ -57,7 +59,7 @@ public interface ProxyService extends ResourceExtensionService {
     /**
      * Updates an existing proxy.
      *
-     * @param uuid the proxy UUID
+     * @param uuid    the proxy UUID
      * @param request proxy update request
      * @return updated proxy DTO
      * @throws NotFoundException if proxy not found
@@ -76,8 +78,8 @@ public interface ProxyService extends ResourceExtensionService {
      * Retrieves installation instructions for a proxy.
      *
      * @param uuid the proxy UUID
-     * @return proxy DTO with installation instructions
+     * @return DTO with installation instructions
      * @throws NotFoundException if proxy not found
      */
-    ProxyDto getInstallationInstructions(SecuredUUID uuid) throws NotFoundException;
+    ProxyInstallInstructionsDto getInstallationInstructions(SecuredUUID uuid) throws NotFoundException;
 }
