@@ -47,6 +47,9 @@ public class JmsConfig {
 
         if (props.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
             configureServiceBusAuthentication(factory, props);
+            // Return raw factory for ServiceBus - listener containers manage their own connections.
+            // CachingConnectionFactory interferes with DefaultMessageListenerContainer recovery
+            // for durable/shared subscriptions. Producers get CachingConnectionFactory via jmsTemplate bean.
             return factory;
         }
 
@@ -55,12 +58,7 @@ public class JmsConfig {
         factory.setUsername(props.username());
         factory.setPassword(props.password());
 
-        // caching connection factory for non-ServiceBus (RabbitMQ)
-        CachingConnectionFactory cachingConnectionFactory = new CachingConnectionFactory(factory);
-        cachingConnectionFactory.setSessionCacheSize(props.sessionCacheSize());
-        cachingConnectionFactory.setReconnectOnException(true);
-
-        return cachingConnectionFactory;
+        return factory;
     }
 
     private void configureServiceBusAuthentication(JmsConnectionFactory factory, MessagingProperties props) {
@@ -127,7 +125,15 @@ public class JmsConfig {
     public JmsTemplate jmsTemplate(ConnectionFactory connectionFactory,
                                    MessageConverter messageConverter,
                                    MessagingProperties messagingProperties) {
-        JmsTemplate template = new JmsTemplate(connectionFactory);
+        // Producers use CachingConnectionFactory for automatic reconnection when broker
+        // forces connection close. This is separate from the listener ConnectionFactory —
+        // DefaultMessageListenerContainer manages its own connections and should NOT use
+        // CachingConnectionFactory (it interferes with container's recovery mechanism).
+        CachingConnectionFactory producerFactory = new CachingConnectionFactory(connectionFactory);
+        producerFactory.setSessionCacheSize(messagingProperties.sessionCacheSize());
+        producerFactory.setReconnectOnException(true);
+
+        JmsTemplate template = new JmsTemplate(producerFactory);
         template.setMessageConverter(messageConverter);
         if (messagingProperties.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
             template.setPubSubDomain(true);

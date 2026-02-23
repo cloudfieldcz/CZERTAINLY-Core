@@ -961,7 +961,11 @@ public class CertificateServiceImpl implements CertificateService, AttributeReso
         }
 
         if (!oldStatus.equals(newStatus)) {
-            eventProducer.produceMessage(CertificateStatusChangedEventHandler.constructEventMessage(certificate.getUuid(), oldStatus, newStatus));
+            try {
+                eventProducer.produceMessage(CertificateStatusChangedEventHandler.constructEventMessage(certificate.getUuid(), oldStatus, newStatus));
+            } catch (Exception e) {
+                logger.warn("Failed to produce status change event for certificate {}: {}", certificate.getUuid(), e.getMessage());
+            }
         }
     }
 
