@@ -433,9 +433,9 @@ class ConnectorServiceTest extends BaseSpringBootTest {
 
     @Test
     void testAddConnector_withProxy() throws ConnectorException, AlreadyExistException, AttributeException, NotFoundException {
-        mockServer.stubFor(WireMock
-                .get("/v1")
-                .willReturn(WireMock.okJson("[]")));
+        // Mock proxy communication - validation now uses MQ client when proxy is set
+        when(proxyClient.sendRequest(any(), any(), any(), any(), any()))
+                .thenReturn(new InfoResponse[0]);
 
         ConnectorRequestDto request = new ConnectorRequestDto();
         request.setName("testConnectorWithProxy");
