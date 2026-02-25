@@ -21,7 +21,6 @@ import com.czertainly.core.security.authz.SecuredUUID;
 import com.czertainly.core.security.authz.SecurityFilter;
 import com.czertainly.core.service.ConnectorAuthService;
 import com.czertainly.core.service.ConnectorService;
-import com.czertainly.core.service.ProxyService;
 import com.czertainly.core.util.AttributeDefinitionUtils;
 import com.czertainly.core.util.MetaDefinitions;
 import jakarta.transaction.Transactional;
@@ -53,7 +52,7 @@ public class ConnectorServiceImpl implements ConnectorService {
     private final ComplianceProfileRuleRepository complianceProfileRuleRepository;
     private final ConnectorAuthService connectorAuthService;
     private final AttributeEngine attributeEngine;
-    private final ProxyService proxyService;
+    private final ProxyRepository proxyRepository;
 
     @Override
     @ExternalAuthorization(resource = Resource.CONNECTOR, action = ResourceAction.LIST)
@@ -153,7 +152,8 @@ public class ConnectorServiceImpl implements ConnectorService {
         connector.setStatus(connectorStatus);
 
         if (StringUtils.isNotBlank(request.getProxyUuid())) {
-            Proxy proxy = proxyService.getProxyEntity(SecuredUUID.fromString(request.getProxyUuid()));
+            Proxy proxy = proxyRepository.findByUuid(SecuredUUID.fromString(request.getProxyUuid()))
+                .orElseThrow(() -> new NotFoundException(Proxy.class, request.getProxyUuid()));
             connector.setProxy(proxy);
         }
 
@@ -193,7 +193,8 @@ public class ConnectorServiceImpl implements ConnectorService {
         connector.setStatus(connectorStatus);
 
         if (request.getProxy() != null) {
-            Proxy proxy = proxyService.getProxyEntity(SecuredUUID.fromString(request.getProxy().getUuid()));
+            Proxy proxy = proxyRepository.findByUuid(SecuredUUID.fromString(request.getProxy().getUuid()))
+                .orElseThrow(() -> new NotFoundException(Proxy.class, request.getProxy().getUuid()));
             connector.setProxy(proxy);
         }
 
@@ -223,7 +224,8 @@ public class ConnectorServiceImpl implements ConnectorService {
             connector.setAuthAttributes(AttributeDefinitionUtils.serialize(authAttributes));
         }
         if (StringUtils.isNotBlank(request.getProxyUuid())) {
-            Proxy proxy = proxyService.getProxyEntity(SecuredUUID.fromString(request.getProxyUuid()));
+            Proxy proxy = proxyRepository.findByUuid(SecuredUUID.fromString(request.getProxyUuid()))
+                .orElseThrow(() -> new NotFoundException(Proxy.class, request.getProxyUuid()));
             connector.setProxy(proxy);
         } else {
             connector.setProxy(null);
