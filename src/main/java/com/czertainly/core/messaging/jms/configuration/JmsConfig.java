@@ -122,9 +122,8 @@ public class JmsConfig {
     }
 
     @Bean
-    public JmsTemplate jmsTemplate(ConnectionFactory connectionFactory,
-                                   MessageConverter messageConverter,
-                                   MessagingProperties messagingProperties) {
+    public CachingConnectionFactory producerConnectionFactory(ConnectionFactory connectionFactory,
+                                                              MessagingProperties messagingProperties) {
         // Producers use CachingConnectionFactory for automatic reconnection when broker
         // forces connection close. This is separate from the listener ConnectionFactory —
         // DefaultMessageListenerContainer manages its own connections and should NOT use
@@ -132,8 +131,14 @@ public class JmsConfig {
         CachingConnectionFactory producerFactory = new CachingConnectionFactory(connectionFactory);
         producerFactory.setSessionCacheSize(messagingProperties.sessionCacheSize());
         producerFactory.setReconnectOnException(true);
+        return producerFactory;
+    }
 
-        JmsTemplate template = new JmsTemplate(producerFactory);
+    @Bean
+    public JmsTemplate jmsTemplate(CachingConnectionFactory producerConnectionFactory,
+                                   MessageConverter messageConverter,
+                                   MessagingProperties messagingProperties) {
+        JmsTemplate template = new JmsTemplate(producerConnectionFactory);
         template.setMessageConverter(messageConverter);
         if (messagingProperties.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
             template.setPubSubDomain(true);
