@@ -65,6 +65,7 @@ class ConnectorRegistrationHandlerTest {
         ConnectorRequestDto captured = captor.getValue();
         assertThat(captured.getName()).isEqualTo("test-connector");
         assertThat(captured.getUrl()).isEqualTo("https://connector.example.com");
+        assertThat(captured.getProxyCode()).isEqualTo("proxy-001");
     }
 
     @Test

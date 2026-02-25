@@ -138,6 +138,18 @@ public class ConnectorServiceImpl implements ConnectorService {
         connectorDto.setAuthType(request.getAuthType());
         connectorDto.setAuthAttributes(AttributeEngine.getResponseAttributesFromBaseAttributes(authAttributes));
 
+        // Resolve proxy before validation so ConnectorApiFactory uses MQ when needed
+        Proxy proxy = null;
+        if (StringUtils.isNotBlank(request.getProxyUuid())) {
+            proxy = proxyRepository.findByUuid(SecuredUUID.fromString(request.getProxyUuid()))
+                .orElseThrow(() -> new NotFoundException(Proxy.class, request.getProxyUuid()));
+            connectorDto.setProxy(proxy.mapToDtoSimple());
+        } else if (StringUtils.isNotBlank(request.getProxyCode())) {
+            proxy = proxyRepository.findByCode(request.getProxyCode())
+                .orElseThrow(() -> new NotFoundException(Proxy.class, request.getProxyCode()));
+            connectorDto.setProxy(proxy.mapToDtoSimple());
+        }
+
         List<ConnectDto> connectResponse = validateConnector(connectorDto);
         List<FunctionGroupDto> functionGroupDtos = new ArrayList<>();
         for (ConnectDto dto : connectResponse) {
@@ -151,9 +163,7 @@ public class ConnectorServiceImpl implements ConnectorService {
         connector.setAuthAttributes(AttributeDefinitionUtils.serialize(authAttributes));
         connector.setStatus(connectorStatus);
 
-        if (StringUtils.isNotBlank(request.getProxyUuid())) {
-            Proxy proxy = proxyRepository.findByUuid(SecuredUUID.fromString(request.getProxyUuid()))
-                .orElseThrow(() -> new NotFoundException(Proxy.class, request.getProxyUuid()));
+        if (proxy != null) {
             connector.setProxy(proxy);
         }
 
