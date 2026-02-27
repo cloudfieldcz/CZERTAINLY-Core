@@ -3,7 +3,7 @@ package com.czertainly.core.messaging.jms.configuration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jms.JmsException;
-import org.springframework.jms.connection.CachingConnectionFactory;
+import org.springframework.jms.connection.SingleConnectionFactory;
 import org.springframework.retry.RetryPolicy;
 import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.retry.backoff.ExponentialBackOffPolicy;
@@ -20,7 +20,7 @@ public class RetryConfig {
 
     @Bean
     public RetryTemplate jmsRetryTemplate(MessagingProperties messagingProperties,
-                                          CachingConnectionFactory producerConnectionFactory) {
+                                          SingleConnectionFactory producerConnectionFactory) {
         RetryTemplate template = new RetryTemplate();
 
         if (messagingProperties.producer() != null && messagingProperties.producer().retry() != null &&
