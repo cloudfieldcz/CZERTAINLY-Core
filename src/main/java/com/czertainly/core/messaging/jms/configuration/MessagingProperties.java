@@ -15,12 +15,12 @@ public record MessagingProperties(
         String brokerUrl,
         String host,
         Integer port,
-        @Positive int sessionCacheSize,
         @NotBlank String exchange,
         String virtualHost,
         String username,      // Required for RabbitMQ and ServiceBus+SAS, optional for ServiceBus+AAD
         String password,  // Required for RabbitMQ and ServiceBus+SAS, optional for ServiceBus+AAD
         @Valid AadAuth aadAuth,
+        Pool pool,
         @Valid Listener listener,
         @Valid Producer producer,
         @Valid Queue queue,
@@ -167,6 +167,26 @@ public record MessagingProperties(
     ) {
         public boolean isEnabled() {
             return StringUtils.isNotBlank(tenantId) && StringUtils.isNotBlank(clientId) && StringUtils.isNotBlank(clientSecret);
+        }
+    }
+
+    /**
+     * Connection pool configuration for JmsPoolConnectionFactory.
+     * Used for both ServiceBus and RabbitMQ producer connection factories.
+     */
+    public record Pool(
+            Integer maxConnections,
+            Integer connectionIdleTimeout,
+            Integer connectionCheckInterval,
+            Integer maxSessionsPerConnection,
+            Boolean useAnonymousProducers
+    ) {
+        public Pool {
+            if (maxConnections == null || maxConnections <= 0) maxConnections = 1;
+            if (connectionIdleTimeout == null) connectionIdleTimeout = 300000;
+            if (connectionCheckInterval == null) connectionCheckInterval = 30000;
+            if (maxSessionsPerConnection == null || maxSessionsPerConnection <= 0) maxSessionsPerConnection = 25;
+            if (useAnonymousProducers == null) useAnonymousProducers = false;
         }
     }
 

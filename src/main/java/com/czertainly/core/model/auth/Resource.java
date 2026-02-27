@@ -67,10 +67,10 @@ public enum Resource {
     TRIGGER("triggers"),
 
     // SAAS
-    TRUSTED_CERTIFICATE("trustedCertificates")
+    TRUSTED_CERTIFICATE("trustedCertificates"),
 
     // CBOMS
-    CBOM("cboms"),
+    CBOM("cboms")
     ;
 
     @Schema(description = "Resource Name",

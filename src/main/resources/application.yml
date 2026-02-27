@@ -143,7 +143,6 @@ spring:
     # Legacy RabbitMQ connection properties (used if broker-url is not set)
     host: ${BROKER_HOST:}
     port: ${BROKER_PORT:5672}
-    session-cache-size: ${BROKER_SESSION_CACHE_SIZE:25}
     exchange: ${BROKER_EXCHANGE:czertainly}
     # --- Authentication ---
     # For RabbitMQ: username/password required
@@ -156,6 +155,12 @@ spring:
       client-secret: ${BROKER_AZURE_CLIENT_SECRET:}
       token-refresh-interval: ${BROKER_AZURE_TOKEN_REFRESH_INTERVAL:300} # seconds
       token-getting-timeout: ${BROKER_AZURE_TOKEN_GETTING_TIMEOUT:30} # seconds
+    pool:
+      max-connections: ${BROKER_POOL_MAX_CONNECTIONS:1}
+      connection-idle-timeout: ${BROKER_POOL_CONNECTION_IDLE_TIMEOUT:300000}
+      connection-check-interval: ${BROKER_POOL_CONNECTION_CHECK_INTERVAL:30000}
+      max-sessions-per-connection: ${BROKER_POOL_MAX_SESSIONS:25}
+      use-anonymous-producers: ${BROKER_POOL_USE_ANONYMOUS_PRODUCERS:false}
     # --- RabbitMQ specific ---
     virtual-host: ${BROKER_VIRTUAL_HOST:}
     # --- Listener/Producer settings ---
