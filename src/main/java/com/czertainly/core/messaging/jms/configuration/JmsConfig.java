@@ -14,8 +14,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jms.annotation.EnableJms;
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory;
-import org.springframework.jms.connection.CachingConnectionFactory;
-import org.springframework.jms.connection.SingleConnectionFactory;
+import org.messaginghub.pooled.jms.JmsPoolConnectionFactory;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.support.converter.MappingJackson2MessageConverter;
 import org.springframework.jms.support.converter.MessageConverter;
@@ -50,7 +49,7 @@ public class JmsConfig {
             configureServiceBusAuthentication(factory, props);
             // Return raw factory for ServiceBus - listener containers manage their own connections.
             // CachingConnectionFactory interferes with DefaultMessageListenerContainer recovery
-            // for durable/shared subscriptions. Producers use SingleConnectionFactory (see below).
+            // for durable/shared subscriptions. Producers use JmsPoolConnectionFactory (see below).
             return factory;
         }
 
@@ -122,40 +121,43 @@ public class JmsConfig {
         return converter;
     }
 
-    @Bean
-    public SingleConnectionFactory producerConnectionFactory(ConnectionFactory connectionFactory,
-                                                              MessagingProperties messagingProperties) {
-        if (messagingProperties.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
-            // For ServiceBus, use SingleConnectionFactory WITHOUT session caching.
-            //
-            // CachingConnectionFactory has a confirmed race condition (Spring #20995/SPR-16450):
-            // when Azure force-closes a connection (amqp:connection:forced), resetConnection()
-            // sets active=true BEFORE super.resetConnection() closes the connection. In this
-            // window, JmsTemplate's finally block can re-cache the stale session proxy, causing
-            // all retries to fail with "The Session was closed due to an unrecoverable error".
-            //
-            // Additionally, Spring's JmsTemplate does NOT call resetConnection() on producer
-            // exceptions (Spring #22031, #26229 — closed NOT_PLANNED). Only the ExceptionListener
-            // callback triggers it, which races with the producer thread.
-            //
-            // SingleConnectionFactory provides the same shared connection + reconnectOnException
-            // behavior without session caching — each send gets a fresh session, eliminating
-            // the stale session problem entirely.
-            SingleConnectionFactory factory = new SingleConnectionFactory(connectionFactory);
-            factory.setReconnectOnException(true);
-            return factory;
+    @Bean(destroyMethod = "stop")
+    public JmsPoolConnectionFactory producerConnectionFactory(ConnectionFactory connectionFactory,
+                                                               MessagingProperties messagingProperties) {
+        // JmsPoolConnectionFactory manages connection/session lifecycle independently of
+        // Spring's shared-connection mechanism. On connection failure (e.g. Azure's
+        // amqp:connection:forced), the pool auto-evicts the dead connection and provides
+        // a fresh one on the next borrow — no manual resetConnection() needed.
+        //
+        // This replaces both SingleConnectionFactory (ServiceBus) and CachingConnectionFactory
+        // (RabbitMQ) with a unified pool that handles session pooling and connection recovery
+        // for both brokers identically.
+        //
+        // connectionIdleTimeout is set well below Azure's ~10-min idle close threshold so the pool
+        // proactively closes idle connections before Azure force-closes them.
+        // connectionCheckInterval enables a background thread to actively evict stale connections.
+        MessagingProperties.Pool poolConfig = messagingProperties.pool();
+        if (poolConfig == null) {
+            poolConfig = new MessagingProperties.Pool(null, null, null, null, null);
         }
 
-        // For RabbitMQ, use CachingConnectionFactory for session caching.
-        // RabbitMQ connections are stable and session caching improves performance.
-        CachingConnectionFactory producerFactory = new CachingConnectionFactory(connectionFactory);
-        producerFactory.setSessionCacheSize(messagingProperties.sessionCacheSize());
-        producerFactory.setReconnectOnException(true);
-        return producerFactory;
+        JmsPoolConnectionFactory pool = new JmsPoolConnectionFactory();
+        pool.setConnectionFactory(connectionFactory);
+        pool.setMaxConnections(poolConfig.maxConnections());
+        pool.setConnectionIdleTimeout(poolConfig.connectionIdleTimeout());
+        pool.setConnectionCheckInterval(poolConfig.connectionCheckInterval());
+        pool.setMaxSessionsPerConnection(poolConfig.maxSessionsPerConnection());
+        pool.setUseAnonymousProducers(poolConfig.useAnonymousProducers());
+        pool.start();
+        logger.info("Started JMS producer connection pool: maxConnections={}, connectionIdleTimeout={}ms, connectionCheckInterval={}ms, maxSessionsPerConnection={}, useAnonymousProducers={}",
+                poolConfig.maxConnections(), poolConfig.connectionIdleTimeout(),
+                poolConfig.connectionCheckInterval(), poolConfig.maxSessionsPerConnection(),
+                poolConfig.useAnonymousProducers());
+        return pool;
     }
 
     @Bean
-    public JmsTemplate jmsTemplate(SingleConnectionFactory producerConnectionFactory,
+    public JmsTemplate jmsTemplate(JmsPoolConnectionFactory producerConnectionFactory,
                                    MessageConverter messageConverter,
                                    MessagingProperties messagingProperties) {
         JmsTemplate template = new JmsTemplate(producerConnectionFactory);
