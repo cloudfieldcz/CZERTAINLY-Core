@@ -22,7 +22,7 @@ import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 @Slf4j
 @Configuration
 @Profile("!test")
-@ConditionalOnProperty(prefix = "proxy.redis", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "proxy.redis", name = "enabled", havingValue = "true")
 public class RedisProxyConfig {
 
     private final ProxyProperties proxyProperties;
