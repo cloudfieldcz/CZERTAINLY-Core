@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @Profile("!test")
-@ConditionalOnProperty(prefix = "proxy.redis", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "proxy.redis", name = "enabled", havingValue = "true")
 public class RedisResponseDistributor {
 
     private final StringRedisTemplate redisTemplate;
