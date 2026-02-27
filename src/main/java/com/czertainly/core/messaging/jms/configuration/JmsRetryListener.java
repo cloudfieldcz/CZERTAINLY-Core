@@ -2,36 +2,41 @@ package com.czertainly.core.messaging.jms.configuration;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jms.connection.CachingConnectionFactory;
+import org.springframework.jms.connection.SingleConnectionFactory;
 import org.springframework.retry.RetryCallback;
 import org.springframework.retry.RetryContext;
 import org.springframework.retry.RetryListener;
 
 /**
- * Retry listener for JMS operations that provides logging and connection cache recovery.
+ * Retry listener for JMS operations that provides logging and connection recovery.
  *
- * <p>When a JMS send fails due to a stale cached producer (e.g., Azure Service Bus
- * force-detaches an AMQP link after idle timeout), Spring's {@link CachingConnectionFactory}
- * may not automatically invalidate the cached session/producer because the underlying
- * connection is still alive. This listener calls {@link CachingConnectionFactory#resetConnection()}
- * on each retry error to force the cache to be cleared, so the next retry gets a fresh
- * session and producer.</p>
+ * <p>When a JMS send fails (e.g., Azure Service Bus force-closes the AMQP connection
+ * with {@code amqp:connection:forced}), this listener calls
+ * {@link SingleConnectionFactory#resetConnection()} on each retry error to close the
+ * broken shared connection, so the next retry lazily creates a fresh one.</p>
  *
- * <p>Thread-safety: This class is stateless (the {@code CachingConnectionFactory} reference
+ * <p>For ServiceBus producers we use {@link SingleConnectionFactory} (no session caching)
+ * to avoid the stale-session race condition in {@code CachingConnectionFactory}
+ * (Spring #20995/SPR-16450). For RabbitMQ we use {@code CachingConnectionFactory}
+ * which extends {@code SingleConnectionFactory}, so {@code resetConnection()} works
+ * for both — the override in {@code CachingConnectionFactory} additionally clears
+ * the session cache.</p>
+ *
+ * <p>Thread-safety: This class is stateless (the {@code SingleConnectionFactory} reference
  * is immutable) and safe to use as a singleton registered in
  * {@link org.springframework.retry.support.RetryTemplate}.</p>
  *
- * @see RetryConfig#jmsRetryTemplate(MessagingProperties, CachingConnectionFactory)
+ * @see RetryConfig#jmsRetryTemplate(MessagingProperties, SingleConnectionFactory)
  * @see com.czertainly.core.messaging.jms.listeners.AbstractJmsEndpointConfig
  */
 public class JmsRetryListener implements RetryListener {
     private static final Logger logger = LoggerFactory.getLogger(JmsRetryListener.class);
     public static final String ENDPOINT_ID_ATTR = "endpointId";
 
-    private final CachingConnectionFactory cachingConnectionFactory;
+    private final SingleConnectionFactory connectionFactory;
 
-    public JmsRetryListener(CachingConnectionFactory cachingConnectionFactory) {
-        this.cachingConnectionFactory = cachingConnectionFactory;
+    public JmsRetryListener(SingleConnectionFactory connectionFactory) {
+        this.connectionFactory = connectionFactory;
     }
 
     @Override
@@ -66,13 +71,12 @@ public class JmsRetryListener implements RetryListener {
 
     @Override
     public <T, E extends Throwable> void onError(RetryContext context, RetryCallback<T, E> callback, Throwable throwable) {
-        // Reset the connection cache to discard stale sessions/producers.
-        // This is critical for Azure Service Bus where individual AMQP links can be
-        // force-detached (idle timeout) while the connection itself remains open.
-        // Without this reset, CachingConnectionFactory keeps serving the stale cached
-        // producer on every retry, causing all attempts to fail with the same error.
-        logger.warn("JMS operation failed, resetting producer connection cache before retry: {}", throwable.getMessage());
-        cachingConnectionFactory.resetConnection();
+        // Reset the shared connection so the next retry gets a fresh one.
+        // For SingleConnectionFactory (ServiceBus): closes the broken connection and nulls it.
+        // For CachingConnectionFactory (RabbitMQ): additionally clears the session cache.
+        // The next JmsTemplate.execute() will lazily create a new connection and session.
+        logger.warn("JMS operation failed, resetting producer connection before retry: {}", throwable.getMessage());
+        connectionFactory.resetConnection();
 
         String endpointId = getEndpointId(context);
         if (endpointId != null) {

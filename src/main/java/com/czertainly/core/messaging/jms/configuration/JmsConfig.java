@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jms.annotation.EnableJms;
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory;
 import org.springframework.jms.connection.CachingConnectionFactory;
+import org.springframework.jms.connection.SingleConnectionFactory;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.support.converter.MappingJackson2MessageConverter;
 import org.springframework.jms.support.converter.MessageConverter;
@@ -49,7 +50,7 @@ public class JmsConfig {
             configureServiceBusAuthentication(factory, props);
             // Return raw factory for ServiceBus - listener containers manage their own connections.
             // CachingConnectionFactory interferes with DefaultMessageListenerContainer recovery
-            // for durable/shared subscriptions. Producers get CachingConnectionFactory via jmsTemplate bean.
+            // for durable/shared subscriptions. Producers use SingleConnectionFactory (see below).
             return factory;
         }
 
@@ -122,12 +123,31 @@ public class JmsConfig {
     }
 
     @Bean
-    public CachingConnectionFactory producerConnectionFactory(ConnectionFactory connectionFactory,
+    public SingleConnectionFactory producerConnectionFactory(ConnectionFactory connectionFactory,
                                                               MessagingProperties messagingProperties) {
-        // Producers use CachingConnectionFactory for automatic reconnection when broker
-        // forces connection close. This is separate from the listener ConnectionFactory —
-        // DefaultMessageListenerContainer manages its own connections and should NOT use
-        // CachingConnectionFactory (it interferes with container's recovery mechanism).
+        if (messagingProperties.brokerType() == MessagingProperties.BrokerType.SERVICEBUS) {
+            // For ServiceBus, use SingleConnectionFactory WITHOUT session caching.
+            //
+            // CachingConnectionFactory has a confirmed race condition (Spring #20995/SPR-16450):
+            // when Azure force-closes a connection (amqp:connection:forced), resetConnection()
+            // sets active=true BEFORE super.resetConnection() closes the connection. In this
+            // window, JmsTemplate's finally block can re-cache the stale session proxy, causing
+            // all retries to fail with "The Session was closed due to an unrecoverable error".
+            //
+            // Additionally, Spring's JmsTemplate does NOT call resetConnection() on producer
+            // exceptions (Spring #22031, #26229 — closed NOT_PLANNED). Only the ExceptionListener
+            // callback triggers it, which races with the producer thread.
+            //
+            // SingleConnectionFactory provides the same shared connection + reconnectOnException
+            // behavior without session caching — each send gets a fresh session, eliminating
+            // the stale session problem entirely.
+            SingleConnectionFactory factory = new SingleConnectionFactory(connectionFactory);
+            factory.setReconnectOnException(true);
+            return factory;
+        }
+
+        // For RabbitMQ, use CachingConnectionFactory for session caching.
+        // RabbitMQ connections are stable and session caching improves performance.
         CachingConnectionFactory producerFactory = new CachingConnectionFactory(connectionFactory);
         producerFactory.setSessionCacheSize(messagingProperties.sessionCacheSize());
         producerFactory.setReconnectOnException(true);
@@ -135,7 +155,7 @@ public class JmsConfig {
     }
 
     @Bean
-    public JmsTemplate jmsTemplate(CachingConnectionFactory producerConnectionFactory,
+    public JmsTemplate jmsTemplate(SingleConnectionFactory producerConnectionFactory,
                                    MessageConverter messageConverter,
                                    MessagingProperties messagingProperties) {
         JmsTemplate template = new JmsTemplate(producerConnectionFactory);
