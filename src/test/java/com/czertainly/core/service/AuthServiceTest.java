@@ -687,7 +687,6 @@ class AuthServiceTest extends BaseSpringBootTest {
                                 "displayName": "List"
                             }
                         ]
-                    }
                     },
                      {
                         "uuid": "84388678-2bc8-422d-b374-fdbc3cc91115",
