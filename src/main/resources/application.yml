@@ -177,12 +177,12 @@ spring:
     queue:
       actions: ${BROKER_QUEUE_ACTIONS:core.actions}
       audit-logs: ${BROKER_QUEUE_AUDIT_LOGS:core.audit-logs}
-      event: ${BROKER_QUEUE_EVENT:core.event}
-      notification: ${BROKER_QUEUE_NOTIFICATION:core.notification}
+      event: ${BROKER_QUEUE_EVENT:core.events}
+      notification: ${BROKER_QUEUE_NOTIFICATION:core.notifications}
       scheduler: ${BROKER_QUEUE_SCHEDULER:core.scheduler}
       validation: ${BROKER_QUEUE_VALIDATION:core.validation}
     routing-key:
-      actions: ${BROKER_ROUTINGKEY_ACTIONS:actions}
+      actions: ${BROKER_ROUTINGKEY_ACTIONS:action}
       audit-logs: ${BROKER_ROUTINGKEY_AUDIT_LOGS:audit-logs}
       event: ${BROKER_ROUTINGKEY_EVENT:event}
       notification: ${BROKER_ROUTINGKEY_NOTIFICATION:notification}
