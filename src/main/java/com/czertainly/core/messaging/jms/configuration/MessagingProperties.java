@@ -183,7 +183,7 @@ public record MessagingProperties(
     ) {
         public Pool {
             if (maxConnections == null || maxConnections <= 0) maxConnections = 1;
-            if (connectionIdleTimeout == null) connectionIdleTimeout = 300000;
+            if (connectionIdleTimeout == null) connectionIdleTimeout = 240000;
             if (connectionCheckInterval == null) connectionCheckInterval = 30000;
             if (maxSessionsPerConnection == null || maxSessionsPerConnection <= 0) maxSessionsPerConnection = 25;
             if (useAnonymousProducers == null) useAnonymousProducers = false;

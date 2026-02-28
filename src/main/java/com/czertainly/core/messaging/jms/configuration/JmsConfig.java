@@ -133,8 +133,8 @@ public class JmsConfig {
         // (RabbitMQ) with a unified pool that handles session pooling and connection recovery
         // for both brokers identically.
         //
-        // connectionIdleTimeout is set well below Azure's ~10-min idle close threshold so the pool
-        // proactively closes idle connections before Azure force-closes them.
+        // connectionIdleTimeout (4 min) is set below Azure's 5-min "connection close after all links
+        // detached" threshold so the pool proactively evicts idle connections before Azure force-closes them.
         // connectionCheckInterval enables a background thread to actively evict stale connections.
         MessagingProperties.Pool poolConfig = messagingProperties.pool();
         if (poolConfig == null) {
