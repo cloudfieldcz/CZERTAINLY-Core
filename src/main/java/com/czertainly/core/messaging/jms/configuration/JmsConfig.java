@@ -40,6 +40,15 @@ public class JmsConfig {
                 props.virtualHost() != null && !props.virtualHost().isEmpty()) {
             builder.queryParam("amqp.vhost", "vhost:" + props.virtualHost());
         }
+
+        // AMQP idle timeout: tells the remote peer how often to send heartbeat (empty) frames
+        // to keep the connection alive at the transport level (default: 2 minutes).
+        // See: http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#doc-doc-idle-time-out
+        int amqpIdleTimeout = props.amqpIdleTimeout() != null ? props.amqpIdleTimeout() : 120000;
+        if (amqpIdleTimeout > 0) {
+            builder.queryParam("amqp.idleTimeout", amqpIdleTimeout);
+        }
+
         String brokerUrl = builder.build().toUriString();
 
         JmsConnectionFactory factory = new JmsConnectionFactory(brokerUrl);
@@ -63,8 +72,8 @@ public class JmsConfig {
 
     private void configureServiceBusAuthentication(JmsConnectionFactory factory, MessagingProperties props) {
         if (props.aadAuth() != null && props.aadAuth().isEnabled()) {
-            // AAD (Azure Active Directory) OAuth2 authentication
-            logger.info("Connecting to Azure ServiceBus: {} using AAD authentication", props.getEffectiveBrokerUrl());
+            // AAD (Entra ID) OAuth2 authentication
+            logger.info("Connecting to ServiceBus: {} using AAD authentication", props.getEffectiveBrokerUrl());
 
             TokenCredential credential = new ClientSecretCredentialBuilder()
                     .tenantId(props.aadAuth().tenantId())
@@ -74,7 +83,7 @@ public class JmsConfig {
 
             AadTokenProvider tokenProvider = new AadTokenProvider(credential, props.aadAuth().tokenRefreshInterval(), props.aadAuth().tokenGettingTimeout());
 
-            // Azure ServiceBus requires "$jwt" username for OAuth2 token authentication
+            // ServiceBus requires "$jwt" username for OAuth2 token authentication
             factory.setUsername("$jwt");
             factory.setExtension(
                     JmsConnectionExtensions.PASSWORD_OVERRIDE.toString(),
@@ -125,17 +134,14 @@ public class JmsConfig {
     public JmsPoolConnectionFactory producerConnectionFactory(ConnectionFactory connectionFactory,
                                                                MessagingProperties messagingProperties) {
         // JmsPoolConnectionFactory manages connection/session lifecycle independently of
-        // Spring's shared-connection mechanism. On connection failure (e.g. Azure's
-        // amqp:connection:forced), the pool auto-evicts the dead connection and provides
-        // a fresh one on the next borrow — no manual resetConnection() needed.
+        // Spring's shared-connection mechanism. On connection failure (e.g. amqp:connection:forced),
+        // the pool auto-evicts the dead connection and provides a fresh one on the next borrow —
+        // no manual resetConnection() needed.
         //
-        // This replaces both SingleConnectionFactory (ServiceBus) and CachingConnectionFactory
-        // (RabbitMQ) with a unified pool that handles session pooling and connection recovery
-        // for both brokers identically.
-        //
-        // connectionIdleTimeout (4 min) is set below Azure's 5-min "connection close after all links
-        // detached" threshold so the pool proactively evicts idle connections before Azure force-closes them.
-        // connectionCheckInterval enables a background thread to actively evict stale connections.
+        // connectionIdleTimeout=30s evicts idle connections before the broker's idle thresholds.
+        // useAnonymousProducers=true keeps a persistent AMQP link on the connection, preventing
+        // the broker's "no active links" forced close.
+        // connectionCheckInterval=60s enables a background thread to actively evict stale connections.
         MessagingProperties.Pool poolConfig = messagingProperties.pool();
         if (poolConfig == null) {
             poolConfig = new MessagingProperties.Pool(null, null, null, null, null);
