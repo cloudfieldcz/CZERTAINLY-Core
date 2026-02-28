@@ -92,12 +92,13 @@ spring:
     broker-url: amqp://localhost:5672
     username: guest
     password: guest
+    amqp-idle-timeout: 120000
     pool:
       max-connections: 1
-      connection-idle-timeout: 240000
-      connection-check-interval: 30000
+      connection-idle-timeout: 30000
+      connection-check-interval: 60000
       max-sessions-per-connection: 5
-      use-anonymous-producers: false
+      use-anonymous-producers: true
     queue:
       actions: core.actions
       audit-logs: core.audit-logs
