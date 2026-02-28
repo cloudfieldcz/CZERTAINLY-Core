@@ -157,7 +157,7 @@ spring:
       token-getting-timeout: ${BROKER_AZURE_TOKEN_GETTING_TIMEOUT:30} # seconds
     pool:
       max-connections: ${BROKER_POOL_MAX_CONNECTIONS:1}
-      connection-idle-timeout: ${BROKER_POOL_CONNECTION_IDLE_TIMEOUT:300000}
+      connection-idle-timeout: ${BROKER_POOL_CONNECTION_IDLE_TIMEOUT:240000}
       connection-check-interval: ${BROKER_POOL_CONNECTION_CHECK_INTERVAL:30000}
       max-sessions-per-connection: ${BROKER_POOL_MAX_SESSIONS:25}
       use-anonymous-producers: ${BROKER_POOL_USE_ANONYMOUS_PRODUCERS:false}

@@ -94,7 +94,7 @@ spring:
     password: guest
     pool:
       max-connections: 1
-      connection-idle-timeout: 300000
+      connection-idle-timeout: 240000
       connection-check-interval: 30000
       max-sessions-per-connection: 5
       use-anonymous-producers: false
