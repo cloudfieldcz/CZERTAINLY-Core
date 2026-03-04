@@ -11,12 +11,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jms.config.SimpleJmsListenerEndpoint;
 import org.springframework.retry.support.RetryTemplate;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link ProxyMessageJmsEndpointConfig}.
@@ -34,44 +34,45 @@ class ProxyMessageJmsEndpointConfigTest {
     @Mock
     private RetryTemplate retryTemplate;
 
-    private ProxyMessageJmsEndpointConfig config;
+    private ProxyProperties proxyProperties;
 
     @BeforeEach
     void setUp() {
-        ProxyProperties proxyProperties = new ProxyProperties(
-                "test-proxy-exchange",
+        proxyProperties = new ProxyProperties(
+            "test-proxy-exchange",
                 "test-core-queue",
                 Duration.ofSeconds(30),
                 1000,
+                null,
                 null
         );
-
-        config = new ProxyMessageJmsEndpointConfig(proxyProperties);
-        ReflectionTestUtils.setField(config, "listenerMessageProcessor", messageProcessor);
-        ReflectionTestUtils.setField(config, "jmsRetryTemplate", retryTemplate);
-        ReflectionTestUtils.setField(config, "messagingProperties", messagingProperties);
-        ReflectionTestUtils.setField(config, "objectMapper", new ObjectMapper());
     }
 
     @Test
     void listenerEndpoint_withServiceBus_configuresSubscriptionAndSelector() {
         when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.SERVICEBUS);
+        when(messagingProperties.consumerDestination(any())).thenReturn(proxyProperties.exchange());
 
+        ProxyMessageJmsEndpointConfig config = new ProxyMessageJmsEndpointConfig(new ObjectMapper(), messageProcessor, retryTemplate, messagingProperties, proxyProperties);
         SimpleJmsListenerEndpoint endpoint = config.listenerEndpoint();
 
-        assertThat(endpoint.getDestination()).isEqualTo("test-proxy-exchange");
-        assertThat(endpoint.getSubscription()).isEqualTo("test-core-queue");
-        assertThat(endpoint.getSelector()).isNotNull();
-        assertThat(endpoint.getSelector()).contains("test-core-queue");
+        assertThat(endpoint.getDestination()).isEqualTo(proxyProperties.exchange());
+        assertThat(endpoint.getSubscription()).isEqualTo(proxyProperties.responseQueue());
+        assertThat(endpoint.getSelector()).isNull();
     }
 
     @Test
     void listenerEndpoint_withRabbitMQ_noSubscriptionOrSelector() {
-        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.RABBITMQ);
+        String destination = "/queues/" + proxyProperties.responseQueue();
 
+        when(messagingProperties.brokerType()).thenReturn(MessagingProperties.BrokerType.RABBITMQ);
+        when(messagingProperties.consumerDestination(any())).thenReturn(destination);
+
+        ProxyMessageJmsEndpointConfig config = new ProxyMessageJmsEndpointConfig(new ObjectMapper(), messageProcessor, retryTemplate, messagingProperties, proxyProperties);
         SimpleJmsListenerEndpoint endpoint = config.listenerEndpoint();
 
-        assertThat(endpoint.getDestination()).isEqualTo("test-proxy-exchange");
+
+        assertThat(endpoint.getDestination()).isEqualTo(destination);
         assertThat(endpoint.getSubscription()).isNull();
         assertThat(endpoint.getSelector()).isNull();
     }
