@@ -36,7 +36,10 @@ public class ProxyMessageJmsEndpointConfig extends AbstractJmsEndpointConfig<Pro
     public SimpleJmsListenerEndpoint listenerEndpoint() {
         return listenerEndpointInternal(
             "proxyMessageListener",
-            messagingProperties.consumerDestination(proxyProperties.responseQueue()),
+            // messagingProperties.consumerDestination cannot be used here because the destination for SERVICEBUS is taken from messagingProperties.exchange()
+            messagingProperties.brokerType() == MessagingProperties.BrokerType.SERVICEBUS
+                 ? proxyProperties.exchange()
+                : "/queues/" + proxyProperties.responseQueue(),
             proxyProperties.responseQueue(),
             null,
             proxyProperties.concurrency(),
