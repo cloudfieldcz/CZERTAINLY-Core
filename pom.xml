@@ -10,7 +10,7 @@
     </parent>
 
     <artifactId>core</artifactId>
-    <version>2.16.4-SNAPSHOT</version>
+    <version>2.17.16-SAAS</version>
     <name>CZERTAINLY-Core</name>
 
     <properties>
@@ -62,9 +62,9 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.czertainly</groupId>
-            <artifactId>interfaces</artifactId>
-            <version>2.16.3-SNAPSHOT</version>
+            <groupId>com.github.cloudfieldcz</groupId>
+            <artifactId>CZERTAINLY-Interfaces</artifactId>
+            <version>main-saas-SNAPSHOT</version>
         </dependency>
 
         <!-- Spring  -->
@@ -439,6 +439,10 @@
     </build>
 
     <repositories>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
         <repository>
             <id>github</id>
             <url>https://maven.pkg.github.com/czertainly/*</url>
