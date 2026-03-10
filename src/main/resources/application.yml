@@ -29,6 +29,13 @@ logging:
   level:
     com:
       czertainly: ${CZERTAINLY_LOG_LEVEL:INFO}
+    org:
+      messaginghub:
+        pooled:
+          jms: ${JMS_POOL_LOG_LEVEL:DEBUG}
+      apache:
+        qpid:
+          jms: ${QPID_JMS_LOG_LEVEL:INFO}
   pattern:
     console: '[%d{yyyy-MM-dd HH:mm:ss.SSS}] %-5level [%t] [%logger - %line]: %m%n'
     file: '[%d{yyyy-MM-dd HH:mm:ss.SSS}] %-5level [%t] [%logger - %line]: %m%n'
